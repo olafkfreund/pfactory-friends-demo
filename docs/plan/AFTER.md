@@ -33,8 +33,8 @@ than quietly edited.
     gates_passed:   false    ->  false
     readiness:      11 pass, 6 not_applicable  ->  10 pass, 7 not_applicable, 1 FAIL
 
-The verdict was already `false` before, on a false positive. It is `false` now for
-six real reasons.
+The verdict was already `false` before, and it was `false` on a false positive.
+It is `false` now for five real reasons.
 
 ## What the compliance lens says
 
