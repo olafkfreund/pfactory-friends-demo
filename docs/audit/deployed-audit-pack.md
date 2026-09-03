@@ -1,0 +1,427 @@
+# EU AI Act Audit Pack — MyFriends
+
+> This audit pack is a descriptive evidence bundle assembled from PFactory's planning record. The EU AI Act article/heading references are navigational labels indicating where each artifact may be relevant; they are NOT an assertion of EU AI Act conformity for the system, model, or plan. Conformity determinations require a qualified legal / conformity assessment. PFactory makes no conformity claim.
+
+- Plan id: `013-myfriends`
+- Generated: 2026-09-03T13:05:39.113201+00:00
+- Schema: `audit-pack/v0`
+
+## Cross-reference
+
+| Artifact | Present | EU AI Act headings (descriptive) |
+| --- | --- | --- |
+| Honoured source document | yes | Technical documentation (Art. 11 / Annex IV) |
+| Review-gate findings & citations | yes | Risk management (Art. 9); Technical documentation (Art. 11 / Annex IV) |
+| Human approval record | no | Human oversight (Art. 14); Record-keeping & logging (Art. 12) |
+| Signed Task Contract (RFC-0002) | no | Technical documentation (Art. 11 / Annex IV); Record-keeping & logging (Art. 12) |
+| Completion & correlation timeline | no | Record-keeping & logging (Art. 12) |
+| TFactory verification verdict | no | Technical documentation (Art. 11 / Annex IV); Risk management (Art. 9) |
+
+## Evidence
+
+### Honoured source document
+
+_The plan as ingested: 'MyFriends' (12 stated acceptance criteria)._
+
+```json
+{
+  "title": "MyFriends",
+  "description": "A mobile app for finding and connecting with people nearby who are open to making\nnew friends. Not dating. The premise is that adults and older teenagers who move\nto a new city, change jobs, or come out of a long relationship have no good way to\nmeet people platonically, and existing apps either optimise for romance or for\nprofessional networking.\n\n## Product\n\nA person installs the app, creates a profile, and sets themselves as open to new\nfriends. The app shows other people nearby who are also open, ordered by how well\ntheir stated interests and availability match. Either person can send a connection\nrequest; when both accept, they can message each other in the app.\n\nThe distinguishing feature is the \"open to new friends\" toggle. Discovery only\nsurfaces people who have deliberately turned it on, so nobody appears in anyone\nelse's results by default.\n\n## Users\n\n- Adults aged 18 and over, the primary audience.\n- Older teenagers aged 16 and 17, who we expect to be a meaningful minority of\n  signups and who we do not want to exclude.\n\n## Platforms\n\nNative on both platforms, no cross-platform framework.\n\n- iOS: Swift, SwiftUI, minimum iOS 16.\n- Android: Kotlin, Jetpack Compose, minimum API 29.\n- A shared backend serving both clients.\n\nThe business logic that decides matching and eligibility should be testable\nindependently of the UI on each platform.\n\n## Markets at launch\n\nUnited Kingdom, the European Union (starting with Ireland, Germany and the\nNetherlands), and the United States (California first).",
+  "target_kind": "software",
+  "plan_type": "mobile-app",
+  "acceptance_criteria": [
+    {
+      "id": "AC#1",
+      "text": "A person can create an account and a profile containing a display name, a photo, an age, a short bio, and up to ten interest tags."
+    },
+    {
+      "id": "AC#2",
+      "text": "A person can turn \"open to new friends\" on and off, and turning it off removes them from every other person's discovery results within one minute."
+    },
+    {
+      "id": "AC#3",
+      "text": "Discovery returns only people who currently have \"open to new friends\" turned on and who are within the searching person's chosen radius, which can be set to 1, 5, 10 or 25 kilometres."
+    },
+    {
+      "id": "AC#4",
+      "text": "Discovery results are ordered by a match score computed from shared interest tags and overlapping stated availability, and the app shows the person why each result was surfaced."
+    },
+    {
+      "id": "AC#5",
+      "text": "A person can send a connection request to someone in their discovery results, and can send at most twenty requests in any twenty-four hour period."
+    },
+    {
+      "id": "AC#6",
+      "text": "Two people can exchange messages in the app only after both have accepted the connection."
+    },
+    {
+      "id": "AC#7",
+      "text": "A person can block another person, and a blocked person can never appear in their discovery results, send them a request, or message them."
+    },
+    {
+      "id": "AC#8",
+      "text": "A person can report another person or a message, choosing from a fixed list of reasons and optionally adding free text."
+    },
+    {
+      "id": "AC#9",
+      "text": "The app works with no network connection to the extent of showing the person's own profile and their existing accepted connections and previously loaded messages."
+    },
+    {
+      "id": "AC#10",
+      "text": "The iOS and Android clients share a single definition of the match score, so the same two profiles produce the same score on both platforms."
+    },
+    {
+      "id": "AC#11",
+      "text": "The backend exposes the discovery, request, and messaging operations over an authenticated API, and rejects any unauthenticated call."
+    },
+    {
+      "id": "AC#12",
+      "text": "Location is only read while the person is actively using the app."
+    }
+  ],
+  "content_hash": "ca57755cf83c86d7a3b688edcccc026d",
+  "raw_text": "# MyFriends\n\nA mobile app for finding and connecting with people nearby who are open to making\nnew friends. Not dating. The premise is that adults and older teenagers who move\nto a new city, change jobs, or come out of a long relationship have no good way to\nmeet people platonically, and existing apps either optimise for romance or for\nprofessional networking.\n\n## Product\n\nA person installs the app, creates a profile, and sets themselves as open to new\nfriends. The app shows other people nearby who are also open, ordered by how well\ntheir stated interests and availability match. Either person can send a connection\nrequest; when both accept, they can message each other in the app.\n\nThe distinguishing feature is the \"open to new friends\" toggle. Discovery only\nsurfaces people who have deliberately turned it on, so nobody appears in anyone\nelse's results by default.\n\n## Users\n\n- Adults aged 18 and over, the primary audience.\n- Older teenagers aged 16 and 17, who we expect to be a meaningful minority of\n  signups and who we do not want to exclude.\n\n## Platforms\n\nNative on both platforms, no cross-platform framework.\n\n- iOS: Swift, SwiftUI, minimum iOS 16.\n- Android: Kotlin, Jetpack Compose, minimum API 29.\n- A shared backend serving both clients.\n\nThe business logic that decides matching and eligibility should be testable\nindependently of the UI on each platform.\n\n## Markets at launch\n\nUnited Kingdom, the European Union (starting with Ireland, Germany and the\nNetherlands), and the United States (California first).\n\n## Acceptance Criteria\n\n- A person can create an account and a profile containing a display name, a photo, an age, a short bio, and up to ten interest tags.\n- A person can turn \"open to new friends\" on and off, and turning it off removes them from every other person's discovery results within one minute.\n- Discovery returns only people who currently have \"open to new friends\" turned on and who are within the searching person's chosen radius, which can be set to 1, 5, 10 or 25 kilometres.\n- Discovery results are ordered by a match score computed from shared interest tags and overlapping stated availability, and the app shows the person why each result was surfaced.\n- A person can send a connection request to someone in their discovery results, and can send at most twenty requests in any twenty-four hour period.\n- Two people can exchange messages in the app only after both have accepted the connection.\n- A person can block another person, and a blocked person can never appear in their discovery results, send them a request, or message them.\n- A person can report another person or a message, choosing from a fixed list of reasons and optionally adding free text.\n- The app works with no network connection to the extent of showing the person's own profile and their existing accepted connections and previously loaded messages.\n- The iOS and Android clients share a single definition of the match score, so the same two profiles produce the same score on both platforms.\n- The backend exposes the discovery, request, and messaging operations over an authenticated API, and rejects any unauthenticated call.\n- Location is only read while the person is actively using the app.\n"
+}
+```
+
+### Review-gate findings & citations
+
+_Multi-lens review: aggregate 0.7786, gates_passed=False._
+
+```json
+{
+  "aggregate_score": 0.7786,
+  "threshold": 0.75,
+  "gates_passed": false,
+  "lenses": [
+    {
+      "lens": "feasibility",
+      "score": 1.0,
+      "findings": []
+    },
+    {
+      "lens": "architecture",
+      "score": 0.9,
+      "findings": [
+        {
+          "title": "Vague titles",
+          "detail": "Unclear titles on: epic.",
+          "severity": "low",
+          "source": "architecture",
+          "blocking": false,
+          "citations": []
+        }
+      ]
+    },
+    {
+      "lens": "security",
+      "score": 0.7,
+      "findings": [
+        {
+          "title": "No authentication/authorization criteria",
+          "detail": "A software plan has no acceptance criterion covering auth; confirm access control is in scope or explicitly out.",
+          "severity": "medium",
+          "source": "security",
+          "blocking": false,
+          "citations": []
+        }
+      ]
+    },
+    {
+      "lens": "compliance",
+      "score": 0.0,
+      "findings": [
+        {
+          "title": "Lawful basis and purpose limitation not stated",
+          "detail": "The plan handles personal data (profiles, accounts, or photos) but states no lawful basis or purpose limitation for that processing. State the basis (e.g. consent, contract, legitimate interest) and the specific purposes the data is collected for. This finding surfaces a potential regulatory obligation and cites sources the engineer can read. It is a descriptive signpost, not legal advice, and not a determination that any law applies or is violated; consult qualified counsel for actual obligations.",
+          "severity": "medium",
+          "source": "compliance",
+          "blocking": false,
+          "citations": [
+            {
+              "title": "GDPR Art. 5 - Principles relating to processing of personal data",
+              "uri": "https://gdpr-info.eu/art-5-gdpr/",
+              "why": "Personal data must be processed for specified, explicit purposes."
+            },
+            {
+              "title": "GDPR Art. 6 - Lawfulness of processing",
+              "uri": "https://gdpr-info.eu/art-6-gdpr/",
+              "why": "Processing personal data requires a stated lawful basis."
+            }
+          ]
+        },
+        {
+          "title": "Location data handling not specified",
+          "detail": "The project constitution (P4.1, enforceable) makes this mandatory: 'location is read only with explicit consent, only at the precision the feature actually needs, and never in the background unless the plan says why and the person was told.'. The plan uses location ('nearby'/geo signals) but does not state explicit consent, precision minimisation (coarse by default), or background-use disclosure. Location is treated as sensitive by regulators and both app stores. This finding surfaces a potential regulatory obligation and cites sources the engineer can read. It is a descriptive signpost, not legal advice, and not a determination that any law applies or is violated; consult qualified counsel for actual obligations.",
+          "severity": "high",
+          "source": "compliance",
+          "blocking": true,
+          "citations": [
+            {
+              "title": "Project constitution P4.1 (enforceable)",
+              "uri": ".factory/constitution.md",
+              "why": "location is read only with explicit consent, only at the precision the feature actually needs, and never in the background unless the plan says why and the person was told."
+            },
+            {
+              "title": "GDPR Art. 6 - Lawfulness of processing",
+              "uri": "https://gdpr-info.eu/art-6-gdpr/",
+              "why": "Processing personal data requires a stated lawful basis."
+            },
+            {
+              "title": "Apple App Review Guideline 5.1.1 - Data Collection and Storage",
+              "uri": "https://developer.apple.com/app-store/review/guidelines/#5.1.1",
+              "why": "Apple review requires purpose strings, consent, and data-collection limits."
+            },
+            {
+              "title": "Google Play policy - Location permissions",
+              "uri": "https://support.google.com/googleplay/android-developer/answer/9799150",
+              "why": "Google Play restricts location access, especially in the background."
+            }
+          ]
+        },
+        {
+          "title": "Automated matching without profiling transparency",
+          "detail": "The plan matches or recommends people/content but says nothing about automated-processing and profiling transparency. State what the algorithm uses, how users are informed, and whether a solely automated decision has significant effects. This finding surfaces a potential regulatory obligation and cites sources the engineer can read. It is a descriptive signpost, not legal advice, and not a determination that any law applies or is violated; consult qualified counsel for actual obligations.",
+          "severity": "medium",
+          "source": "compliance",
+          "blocking": false,
+          "citations": [
+            {
+              "title": "GDPR Art. 13(2)(f) - Information to be provided",
+              "uri": "https://gdpr-info.eu/art-13-gdpr/",
+              "why": "Users must be told about automated decision-making, including profiling."
+            },
+            {
+              "title": "GDPR Art. 22 - Automated individual decision-making, including profiling",
+              "uri": "https://gdpr-info.eu/art-22-gdpr/",
+              "why": "Solely automated decisions with significant effects are restricted."
+            }
+          ]
+        },
+        {
+          "title": "User-to-user contact without trust and safety controls",
+          "detail": "The project constitution (P5.1, enforceable) makes this mandatory: 'any person-to-person surface ships with blocking, reporting, and a stated response path in the same phase. A social feature without moderation is not shippable.'. The plan lets users contact each other but states no blocking, reporting, moderation, or notice-and-action mechanism. Add these as explicit acceptance criteria. This finding surfaces a potential regulatory obligation and cites sources the engineer can read. It is a descriptive signpost, not legal advice, and not a determination that any law applies or is violated; consult qualified counsel for actual obligations.",
+          "severity": "high",
+          "source": "compliance",
+          "blocking": true,
+          "citations": [
+            {
+              "title": "Project constitution P5.1 (enforceable)",
+              "uri": ".factory/constitution.md",
+              "why": "any person-to-person surface ships with blocking, reporting, and a stated response path in the same phase. A social feature without moderation is not shippable."
+            },
+            {
+              "title": "EU Digital Services Act Art. 16 - Notice and action mechanisms",
+              "uri": "https://eur-lex.europa.eu/eli/reg/2022/2065/oj",
+              "why": "Hosting services must provide notice-and-action mechanisms for illegal content."
+            },
+            {
+              "title": "EU Digital Services Act Art. 20 - Internal complaint-handling system",
+              "uri": "https://eur-lex.europa.eu/eli/reg/2022/2065/oj",
+              "why": "Online platforms must operate an internal complaint-handling system."
+            }
+          ]
+        },
+        {
+          "title": "No retention or deletion policy stated",
+          "detail": "The project constitution (P1.2, enforceable) makes this mandatory: 'every feature that stores information about a person must state how long it is kept and what deletes it. \"Indefinitely\" is an answer, but it has to be written down.'. The plan processes personal data but states no retention period, deletion path, or erasure handling. State how long each data class is kept and how a user's erasure request is honoured. This finding surfaces a potential regulatory obligation and cites sources the engineer can read. It is a descriptive signpost, not legal advice, and not a determination that any law applies or is violated; consult qualified counsel for actual obligations.",
+          "severity": "high",
+          "source": "compliance",
+          "blocking": true,
+          "citations": [
+            {
+              "title": "Project constitution P1.2 (enforceable)",
+              "uri": ".factory/constitution.md",
+              "why": "every feature that stores information about a person must state how long it is kept and what deletes it. \"Indefinitely\" is an answer, but it has to be written down."
+            },
+            {
+              "title": "GDPR Art. 5 - Principles relating to processing of personal data",
+              "uri": "https://gdpr-info.eu/art-5-gdpr/",
+              "why": "Personal data must be processed for specified, explicit purposes."
+            },
+            {
+              "title": "GDPR Art. 17 - Right to erasure",
+              "uri": "https://gdpr-info.eu/art-17-gdpr/",
+              "why": "Users have a right to erasure of their personal data."
+            }
+          ]
+        },
+        {
+          "title": "Store distribution without in-app account deletion",
+          "detail": "The project constitution (P2.1, enforceable) makes this mandatory: 'a person can delete their account and their content from inside the app, without contacting anyone, and the deletion path is built in the same phase as the feature that creates the data.'. The plan implies app-store distribution but states no in-app account deletion. Both Apple and Google require apps that support account creation to also offer account deletion. This finding surfaces a potential regulatory obligation and cites sources the engineer can read. It is a descriptive signpost, not legal advice, and not a determination that any law applies or is violated; consult qualified counsel for actual obligations.",
+          "severity": "high",
+          "source": "compliance",
+          "blocking": true,
+          "citations": [
+            {
+              "title": "Project constitution P2.1 (enforceable)",
+              "uri": ".factory/constitution.md",
+              "why": "a person can delete their account and their content from inside the app, without contacting anyone, and the deletion path is built in the same phase as the feature that creates the data."
+            },
+            {
+              "title": "Apple App Review Guideline 5.1.1 - Data Collection and Storage",
+              "uri": "https://developer.apple.com/app-store/review/guidelines/#5.1.1",
+              "why": "Apple review requires purpose strings, consent, and data-collection limits."
+            },
+            {
+              "title": "Google Play policy - App account deletion",
+              "uri": "https://support.google.com/googleplay/android-developer/answer/13327111",
+              "why": "Google Play requires apps with accounts to offer account and data deletion."
+            }
+          ]
+        },
+        {
+          "title": "No age assurance stated",
+          "detail": "The project constitution (P3.1, enforceable) makes this mandatory: 'any feature reachable by someone under 18 must state its age-assurance mechanism and what changes for a minor. Collecting a birth date is not an age-assurance mechanism.'. The plan processes personal data but states no age gate, age assurance, or children's-data handling. State the minimum age, how it is checked, and how under-age users are handled. For a social app that connects users this is a blocking gap. This finding surfaces a potential regulatory obligation and cites sources the engineer can read. It is a descriptive signpost, not legal advice, and not a determination that any law applies or is violated; consult qualified counsel for actual obligations.",
+          "severity": "high",
+          "source": "compliance",
+          "blocking": true,
+          "citations": [
+            {
+              "title": "Project constitution P3.1 (enforceable)",
+              "uri": ".factory/constitution.md",
+              "why": "any feature reachable by someone under 18 must state its age-assurance mechanism and what changes for a minor. Collecting a birth date is not an age-assurance mechanism."
+            },
+            {
+              "title": "COPPA - Children's Online Privacy Protection Rule (16 CFR Part 312)",
+              "uri": "https://www.ftc.gov/legal-library/browse/rules/childrens-online-privacy-protection-rule-coppa",
+              "why": "US services directed at (or knowingly collecting from) under-13s need parental consent."
+            },
+            {
+              "title": "UK ICO Age Appropriate Design Code (Children's Code)",
+              "uri": "https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/childrens-information/childrens-code-guidance-and-resources/",
+              "why": "UK services likely to be accessed by children must meet the Children's Code."
+            },
+            {
+              "title": "GDPR Art. 8 - Conditions applicable to child's consent",
+              "uri": "https://gdpr-info.eu/art-8-gdpr/",
+              "why": "A child's consent is only valid above a member-state age threshold."
+            }
+          ]
+        },
+        {
+          "title": "Enforceable constitution clauses not machine-checked at plan time",
+          "detail": "Clause(s) P7.1 are marked enforceable but classify to no plan-time obligation this lens checks (e.g. a verification-stage rule). They are surfaced here so the approver knows they rely on downstream gates or human review, not on this lens. This finding surfaces a potential regulatory obligation and cites sources the engineer can read. It is a descriptive signpost, not legal advice, and not a determination that any law applies or is violated; consult qualified counsel for actual obligations.",
+          "severity": "info",
+          "source": "compliance",
+          "blocking": false,
+          "citations": [
+            {
+              "title": "Project constitution P7.1 (enforceable)",
+              "uri": ".factory/constitution.md",
+              "why": "a verification lane that could not run is reported as not run, with the reason. It is never reported as passed and never quietly omitted."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "lens": "best-practices",
+      "score": 1.0,
+      "findings": [
+        {
+          "title": "Golden-path guidance available",
+          "detail": "8 knowledge reference(s) surfaced from 1 source(s) (e.g. TFactory, NixOS Module (flake-based service module + agenix-ready), COSMIC Desktop Applet (libcosmic + flake)); confirm the plan follows them.",
+          "severity": "info",
+          "source": "best-practices",
+          "blocking": false,
+          "citations": [
+            {
+              "title": "TFactory",
+              "uri": "https://backstage.freundcloud.org.uk/catalog/default/component/tfactory",
+              "why": "Surfaced from your org's knowledge sources \u2014 the plan should follow it."
+            },
+            {
+              "title": "NixOS Module (flake-based service module + agenix-ready)",
+              "uri": "https://backstage.freundcloud.org.uk/catalog/default/template/nixos-module",
+              "why": "Surfaced from your org's knowledge sources \u2014 the plan should follow it."
+            },
+            {
+              "title": "COSMIC Desktop Applet (libcosmic + flake)",
+              "uri": "https://backstage.freundcloud.org.uk/catalog/default/template/cosmic-applet",
+              "why": "Surfaced from your org's knowledge sources \u2014 the plan should follow it."
+            },
+            {
+              "title": "Tailscale sidecar pattern (factory cluster)",
+              "uri": "https://backstage.freundcloud.org.uk/catalog/default/resource/tailscale-sidecar-pattern",
+              "why": "Surfaced from your org's knowledge sources \u2014 the plan should follow it."
+            },
+            {
+              "title": "Factory Agent-Skills Manifest (RFC-0019)",
+              "uri": "https://backstage.freundcloud.org.uk/catalog/default/api/factory-agent-skills-manifest",
+              "why": "Surfaced from your org's knowledge sources \u2014 the plan should follow it."
+            },
+            {
+              "title": "Backstage Portal",
+              "uri": "https://backstage.freundcloud.org.uk/catalog/default/component/backstage",
+              "why": "Surfaced from your org's knowledge sources \u2014 the plan should follow it."
+            },
+            {
+              "title": "Python Service (FastAPI + uv + flake)",
+              "uri": "https://backstage.freundcloud.org.uk/catalog/default/template/python-service",
+              "why": "Surfaced from your org's knowledge sources \u2014 the plan should follow it."
+            },
+            {
+              "title": "AIFactory",
+              "uri": "https://backstage.freundcloud.org.uk/catalog/default/component/aifactory",
+              "why": "Surfaced from your org's knowledge sources \u2014 the plan should follow it."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "lens": "completeness",
+      "score": 1.0,
+      "findings": [
+        {
+          "title": "Implicit requirements covered",
+          "detail": "All implicit requirements for this plan type (store-listing, permission-prompts, offline, deep-links, crash-reporting, min-os-versions, accessibility, size-battery, release-rollout, forced-upgrade) are demanded by an acceptance criterion.",
+          "severity": "info",
+          "source": "completeness",
+          "blocking": false,
+          "citations": []
+        }
+      ]
+    },
+    {
+      "lens": "red-team",
+      "score": 0.85,
+      "findings": [
+        {
+          "title": "Unstated security / access scope",
+          "detail": "A networked plan never states an authentication/authorization scope. Confirm access control is in scope (and how) or explicitly out of scope.",
+          "severity": "medium",
+          "source": "red-team",
+          "blocking": false,
+          "citations": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Human approval record
+
+_No valid human approval recorded._
+
+Not present in this plan's record.
+
+### Signed Task Contract (RFC-0002)
+
+_No Task Contract emitted for this plan._
+
+Not present in this plan's record.
+
+### Completion & correlation timeline
+
+_Plan has not been emitted — no correlation chain yet._
+
+Not present in this plan's record.
+
+### TFactory verification verdict
+
+_No TFactory verdict on this plan record (verified downstream in TFactory)._
+
+Not present in this plan's record.

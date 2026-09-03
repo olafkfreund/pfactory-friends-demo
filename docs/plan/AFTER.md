@@ -5,17 +5,14 @@ Same brief. Same constitution. Same deterministic pipeline, no model involved.
 Measured on all three changes merged together, because two individually green
 branches can still produce a broken combination and only the merge shows it.
 
-**Provenance of these numbers.** The before run in
-[BASELINE.md](BASELINE.md) was measured against the live deployed service. The
-numbers below were first measured locally on the three branches merged into one
-tree, and have since been **re-measured against `origin/dev` at the merge commit
-`177a0e8`** — every figure reproduced exactly, so what follows is the merged
-code's behaviour rather than a projection from a local combination.
+**Provenance of these numbers.** Measured three times, each on a wider footing
+than the last: first locally on the three branches merged into one tree, then
+against `origin/dev` at the merge commit, and finally — this version — against
+the **deployed production service**, session `013-myfriends` on
+`ghcr.io/olafkfreund/pfactory:sha-baa8a6d`, the image the pod is actually
+serving. Every figure held at each stage.
 
-They are still not the *deployed* service: this fleet deploys from `main`, and
-the change set currently sits on `dev`. When it reaches production this page will
-be measured a third time, and any number that moves will be corrected here rather
-than quietly edited.
+Nothing on this page is a projection.
 
 ## The scoreboard
 
@@ -31,7 +28,9 @@ than quietly edited.
 
     plan_type:      feature  ->  mobile-app
     gates_passed:   false    ->  false
-    readiness:      11 pass, 6 not_applicable  ->  10 pass, 7 not_applicable, 1 FAIL
+    readiness:      11 pass, 6 not_applicable  ->  12 pass, 5 not_applicable, 1 FAIL
+    feature ACs:    12       ->  21   (+9 mobile requirements injected)
+    epic ACs total: 12       ->  28   (+4 testing, +3 CI/CD from synthesis)
 
 The verdict was already `false` before, and it was `false` on a false positive.
 It is `false` now for five real reasons.
@@ -90,9 +89,18 @@ way. This one goes quiet when the obligation is met.
 
 ## The plan grew nine acceptance criteria nobody wrote
 
-Selecting `mobile-app` brings the mobile implicit requirements with it:
+Selecting `mobile-app` brings the mobile implicit requirements with it. Measured
+on the deployed run, broken down by child kind so the two numbers cannot be
+confused:
 
-    acceptance criteria: 12 -> 21  (+9)
+    feature children:  12 children, 21 acceptance criteria   (12 written + 9 injected)
+    testing child:      1 child,     4 acceptance criteria   (from synthesis)
+    cicd child:         1 child,     3 acceptance criteria   (from synthesis)
+    epic total:        14 children, 28 acceptance criteria
+
+The +9 is the mobile injection. The remaining 7 come from the testing and CI/CD
+children the pipeline synthesises, which is a different mechanism and worth not
+conflating.
 
 Store listing and review policy. In-context permission prompts. Offline and
 poor-network behaviour. Deep links from a cold start. Symbolicated crash
@@ -129,3 +137,39 @@ copy would leave the other.
 
 The decomposition is still heuristic. No model runs in this pipeline. Every number
 above is reproducible and free.
+
+## Postscript: the gate had a hole, and the release found it
+
+Reviewing the release pull request, Copilot flagged that
+`declared_jurisdictions()` mixed a structural marker into the list of markets,
+and that all three callers read a non-empty list as "declared". Measured against
+this brief:
+
+    no jurisdictions section at all    declared=[]                        blocking finding raised
+    an EMPTY "## Jurisdictions" heading declared=["jurisdictions-section"]  no finding raised
+
+A heading with nothing underneath it satisfied the blocking compliance finding
+**and** the hard readiness gate, and the marker travelled into the signed
+contract as though it were a market.
+
+That is the pass-shaped empty measurement — a check passing because it examined
+nothing — occurring inside the lens built to catch exactly that. It was fixed
+before the release shipped: structure and declaration are now separate, and the
+regression test carries a negative control that turns red when the marker is put
+back.
+
+The deployed run records the corrected evidence:
+
+    jurisdictions-declared: pass
+    evidence: {"jurisdictions": ["United Kingdom", "European Union", "Germany",
+                                 "Netherlands", "United States", "California"],
+               "jurisdictions_section": false}
+
+Six real markets, and the structural signal recorded separately where it cannot
+be mistaken for one.
+
+It is worth saying plainly rather than burying: this demo argues that a gate
+must never pass by looking at nothing, and the gate shipped with that defect
+until a reviewer caught it. The argument is not that the tooling is incapable of
+the failure. It is that the failure is findable, and that the way to find it is
+to run the thing and read what it actually did.
