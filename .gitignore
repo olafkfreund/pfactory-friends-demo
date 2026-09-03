@@ -1,0 +1,4 @@
+# Build output from the verification-lane fixtures
+lanes/swift-core/.build/
+lanes/kotlin-core/build/
+lanes/kotlin-core/.gradle/
