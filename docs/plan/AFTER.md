@@ -7,15 +7,15 @@ branches can still produce a broken combination and only the merge shows it.
 
 **Provenance of these numbers.** The before run in
 [BASELINE.md](BASELINE.md) was measured against the live deployed service. The
-numbers below were measured locally against the three branches merged into one
-tree, because at the time of writing they are not yet merged — a required
-security check is blocking them
-([PFactory#679](https://github.com/olafkfreund/PFactory/issues/679): two HIGH CVEs
-in the runtime image that a broken Docker build had been masking). They are real
-runs of the real pipeline, not projections, but they are not yet the deployed
-service. This page will be re-measured against the deployment once the chain
-lands, and any number that moves will be corrected here rather than quietly
-edited.
+numbers below were first measured locally on the three branches merged into one
+tree, and have since been **re-measured against `origin/dev` at the merge commit
+`177a0e8`** — every figure reproduced exactly, so what follows is the merged
+code's behaviour rather than a projection from a local combination.
+
+They are still not the *deployed* service: this fleet deploys from `main`, and
+the change set currently sits on `dev`. When it reaches production this page will
+be measured a third time, and any number that moves will be corrected here rather
+than quietly edited.
 
 ## The scoreboard
 
