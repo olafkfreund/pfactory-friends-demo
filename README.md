@@ -79,12 +79,15 @@ real: `gradle test` on `lanes/kotlin-core` reports `tests=2 failures=0 errors=0`
 in its JUnit XML. Not "BUILD SUCCESSFUL" — the actual count, because a Gradle
 build that collects zero tests prints the same success line.
 
-**Swift half-verifies, and we say which half.** `swift build` compiles both the
-library and the test target. `swift test` does not run at all: the nixpkgs Swift
-5.10.1 toolchain is missing `libIndexStore.so`, which test discovery requires. The
-full sequence of attempts, and the check confirming the library is absent from the
-Nix store rather than merely off the search path, is in
-[`lanes/swift-core/NOTES.md`](lanes/swift-core/NOTES.md).
+**Swift verifies too, for library code.** `swift test` on `lanes/swift-core`
+reports `Executed 2 tests, with 0 failures`, and `Executed 2 tests, with 1
+failure` once the implementation is mutated. Getting there took four wrong
+answers, the last of which was concluding the lane was impossible — nixpkgs ships
+no `libIndexStore.so`, so SwiftPM's automatic test discovery is broken, but the
+pre-5.4 `LinuxMain.swift` convention still works.
+[`lanes/swift-core/NOTES.md`](lanes/swift-core/NOTES.md) records the whole
+sequence, including the trap it leaves behind: a test omitted from the manifest
+does not run, and the suite still reports green.
 
 **SwiftUI tests, the iOS simulator, `xcodebuild` and the `.ipa` do not run at
 all.** They require macOS, and there is no macOS machine in this fleet. There
@@ -96,8 +99,10 @@ That behaviour is not a gap in the demo — it is the single most important thin
 it. A verification system that cannot say "I did not check this" is a verification
 system whose green ticks mean nothing.
 
-It would have been easy to write this section claiming Swift works, and to be
-wrong. The first draft did. It was corrected because the command was actually run.
+This section has now been wrong in both directions. The first draft claimed Swift
+verified cleanly, before anything had been run. The second claimed it could not
+verify at all, after four failed attempts that looked conclusive. Both were
+corrected by running the command again rather than by reasoning harder about it.
 
 ## Reproducing it
 

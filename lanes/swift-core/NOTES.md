@@ -1,76 +1,101 @@
-# The Swift lane, and exactly how far it gets on Linux
+# The Swift lane on Linux: it works, and the way it fails is the interesting part
 
 This package exists to answer one question with evidence rather than opinion: can
 this fleet, which runs on Linux, verify the Swift half of a native iOS app?
 
-The answer as measured on 2026-09-03, against nixpkgs `swift` 5.10.1:
+**Yes, for library code.** Measured on 2026-09-03 against nixpkgs `swift` 5.10.1:
 
-| Step | Result |
-| --- | --- |
-| `swift build` | **works** — both the library and the test target compile |
-| `swift test` | **fails** — the toolchain is missing `libIndexStore.so` |
-| SwiftUI / UIKit tests, iOS simulator, `xcodebuild`, `.ipa` | not attempted; these require macOS and there is no macOS machine in this fleet |
+    Test Suite 'MatchScoreTests' started
+    Test Case 'MatchScoreTests.testHalfTheInterestsOverlap' passed (0.001 seconds)
+    Test Case 'MatchScoreTests.testEmptyInterestsScoreZeroRatherThanCrashing' passed
+    Executed 2 tests, with 0 failures (0 unexpected)
 
-## What was tried, in order
+and, with the implementation mutated to `return 1.0`:
 
-Each step fixed the previous error and revealed the next, so the failure below is
-not a missing flag or a wrong invocation.
+    Executed 2 tests, with 1 failure (0 unexpected)
+
+A lane that only ever passes proves nothing, so both directions were run.
+
+SwiftUI and UIKit tests, the iOS simulator, `xcodebuild` and the `.ipa` remain
+out of reach. They need macOS, and there is no macOS machine in this fleet.
+
+## Getting there took four wrong answers
+
+An earlier version of this file concluded the lane was impossible. That was
+wrong, and the sequence matters, because each step fixed the previous error and
+revealed the next.
 
 1. `nix shell nixpkgs#swift -c swift test`
 
        swift: line 35: exec: swift-test: not found
 
-   The nixpkgs `swift` attribute is the compiler and driver only. SwiftPM is a
+   The nixpkgs `swift` attribute is compiler and driver only. SwiftPM is a
    separate derivation, `swiftpm`.
 
 2. Adding `swiftpm`:
 
-       error: 'swift-core': Invalid manifest ...
-       swift-core-manifest: error while loading shared libraries: libdispatch.so:
-       cannot open shared object file: No such file or directory
+       Invalid manifest ... swift-core-manifest: error while loading shared
+       libraries: libdispatch.so: cannot open shared object file
 
-   The manifest is compiled and executed, so libdispatch has to be on the runtime
-   library path.
+   The manifest is compiled and then executed, so libdispatch must be on the
+   runtime library path before SwiftPM has even read `Package.swift`.
 
-3. A `mkShell` carrying `swiftPackages.{swift, swiftpm, Dispatch, Foundation, XCTest}`
-   with those libraries on `LD_LIBRARY_PATH`. `XCTest` now resolves and **both
-   targets compile**:
+3. A shell carrying `swiftPackages.{swift,swiftpm,Dispatch,Foundation,XCTest}`
+   with those libraries on `LD_LIBRARY_PATH`. Both targets now compile, and test
+   discovery fails:
 
-       [4/15] Compiling MyFriendsCore MatchScore.swift
-       [8/18] Compiling MyFriendsCoreTests MatchScoreTests.swift
-
-   Then test discovery fails:
-
-       error: open("/nix/store/...-swift-5.10.1-lib/lib/libIndexStore.so:
-       cannot open shared object file: No such file or directory")
+       error: open(".../swift-5.10.1-lib/lib/libIndexStore.so: cannot open
+       shared object file: No such file or directory")
        [10/19] .../MyFriendsCorePackageDiscoveredTests.derived/all-discovered-tests.swift
-       error: fatalError
 
-4. `swift test --disable-index-store` fails identically.
+   `swift test --disable-index-store` fails identically, and the library is
+   absent from the entire Nix store, not merely off the search path.
 
-5. The library is genuinely absent, not merely unfound:
+4. **This is where the earlier conclusion stopped, and it was premature.**
+   nixpkgs ships no `libIndexStore.so` (NixOS/nixpkgs#379859), so SwiftPM's
+   *automatic* test discovery cannot work — but automatic discovery is not the
+   only mechanism. The pre-5.4 convention still works: an explicit
+   `Tests/LinuxMain.swift` plus `Tests/MyFriendsCoreTests/XCTestManifests.swift`
+   listing the tests. Add those two files and `swift test` builds, runs, reports
+   per-test results, and fails when the code is wrong.
 
-       $ ls /nix/store/...-swift-5.10.1-lib/lib/
-       swift
-       libswiftDemangle.so
+The lesson is not about Swift. It is that "the obvious path is broken" and "the
+capability is unavailable" are different claims, and the first was mistaken for
+the second.
 
-       $ find /nix/store -maxdepth 3 -name 'libIndexStore.so*' -path '*swift*'
-       (no output)
+## The trap this leaves behind
 
-## Why this is in the demo rather than hidden
+A test that is not listed in `XCTestManifests.swift` **does not run, and nothing
+says so.** Deleting one entry from the manifest and re-running:
 
-A verification system that cannot say "I did not check this" produces green ticks
-that mean nothing. The Swift unit lane is therefore declared unavailable **with
-this reason attached**, and any plan that depends on it is marked as unverified at
-that level rather than passed.
+    Test Suite 'All tests' started
+    Executed 1 test, with 0 failures (0 unexpected)
+    Test Suite 'All tests' passed
+    exit 0
 
-The alternative — quietly omitting the lane, or letting the absence of failures
-read as success — is the specific failure this fleet has spent months rooting out.
-An empty measurement and a clean pass must not look the same.
+Green. Passing. Exit zero. One of the two tests simply was not there, and the
+only trace is the count: `Executed 1 test` where it should say 2.
+
+This is the exact failure this project keeps finding in other guises — a result
+that passed because it examined less than it should have, wearing the same face
+as one that examined everything. Anything generating Swift tests must emit the
+manifest entry alongside every test it writes, and anything reading the result
+must read the executed count, not the verdict.
 
 ## A note on reading exit codes
 
-Every command above was piped to `tail`. A shell pipeline reports the exit status
-of its **last** stage, so all of these runs reported success while failing. The
-real status came from `PIPESTATUS`. If you reproduce this, capture it, or you will
-record a failure as a pass.
+The failing runs above were piped to `tail`. A shell pipeline reports the exit
+status of its **last** stage, so every one of them reported success while
+failing. The real status came from `PIPESTATUS`. If you reproduce this, capture
+it, or you will record a failure as a pass — which is how three of the four wrong
+answers above nearly went unnoticed.
+
+## Reproducing
+
+    nix develop <shell with swift, swiftpm, Dispatch, Foundation, XCTest>
+    swift test
+
+The provisioning is declared in the Factory hub at
+`contracts/languages/swift.yaml`, including the `LD_LIBRARY_PATH` requirement and
+the manifest convention, so a generated flake carries both without anyone having
+to rediscover the sequence above.
