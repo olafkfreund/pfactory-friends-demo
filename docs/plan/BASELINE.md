@@ -4,8 +4,8 @@ Before any of the mobile or compliance work described in the README, the
 MyFriends brief was put through PFactory exactly as it shipped, so the demo has an
 honest starting point rather than a claimed one.
 
-Session `010-myfriends`, PFactory 0.6.16, 2026-09-03. The brief parsed cleanly:
-twelve acceptance criteria in, fourteen child issues out, in 0.58 seconds.
+Session `011-myfriends`, PFactory 0.6.16, 2026-09-03. The brief parsed cleanly:
+twelve acceptance criteria in, fourteen child issues out, in 3.5 seconds.
 
 ## The scoreboard
 
@@ -57,36 +57,71 @@ phrasing of an auth requirement reads as an absent one. Filed as
 paths for a native mobile app. The knowledge retrieval had nothing mobile to
 offer, so it offered what it had.
 
-## Three more things the run reveals
+## The constitution is read, and it changes nothing
 
-- `plan_type` came out as **feature**. There is no mobile plan type to select.
+A first attempt passed the target repository to `/process`, where the parameter
+is silently ignored — it belongs on `/ingest-text`. Without it the run is
+greenfield, nine checks return `not_applicable` and the policy below is never
+read at all. Corrected, reconnaissance executes and the repository's own policy
+is picked up:
+
+    constitution-grounded -> pass
+    18 principle(s); 7 enforced as HARD checks (P1.2, P2.1, P3.1, P4.1, P5.1, P6.1, P7.1)
+
+Those seven clauses require a stated retention period for anything held about a
+person, in-app account deletion built alongside the feature that creates the
+data, a stated age-assurance mechanism for anything a minor can reach, location
+read only with explicit consent at minimum precision, blocking and reporting and
+a response path on any person-to-person surface, named jurisdictions, and no
+claiming a verification lane that did not run.
+
+The brief satisfies **none of them**. The review output is byte-for-byte the same
+three findings, the same scores, the same verdict. Readiness improves to eleven
+passing and six not applicable, and `constitution-grounded` reports `pass`.
+
+So the customer's own written policy is parsed, hash-bound to the plan, and shown
+to the approver as "7 enforced as HARD checks" — and not one of the seven
+produces a finding. The machinery to carry a policy end to end already works.
+What is missing is the thing that reads the plan against it.
+
+## Two more things the run reveals
+
+- `plan_type` came out as **feature**. There is no mobile plan type to select,
+  and this brief does not even reach `software-service`.
 - `target_language` came out as **None**. The brief names Swift and Kotlin in
-  prose; the pipeline did not carry that forward.
-- `constitution_md` was **absent**. The repository's own
-  `.factory/constitution.md` was never read, so the seven enforceable clauses the
-  brief violates were never applied.
+  prose. `TargetKind` is `software | non-software | undetermined` — there is no
+  platform axis in the model at all.
 
-## Nine of seventeen readiness checks examined nothing
+## And the decomposition is heuristic, not reasoned
 
-The readiness gate ran seventeen checks. Eight passed. The other nine returned
-`not_applicable`, and four of those are marked `hard`:
+`decompose_method: heuristic`. The default pipeline is entirely deterministic:
+the process route injects no model, so the prompt builder that would inject the
+constitution into planning is never called. That is not a criticism — a
+deterministic gate is reproducible, auditable and free, which is exactly what a
+governance layer should be. But it does mean the constitution's only live effect
+today is its appearance in the readiness report, and that anything intended to
+influence the plan has to be code, not a prompt.
+
+## Six of seventeen readiness checks examined nothing
+
+The readiness gate ran seventeen checks. Eleven passed. The other six returned
+`not_applicable`, and five of those are marked `hard`:
 
 | Check | hard | Reason given |
 | --- | --- | --- |
-| service-requirements-covered | yes | Not a deployable software service |
-| access-granted | yes | No access requirements were derived |
-| env-buildable | yes | No local-cluster probe ran |
-| deployment-pipeline-present | yes | No deployment dimension |
-| enrichment-integrity | yes | No infra adapters ran |
-| language-reconciled | no | Greenfield, nothing to reconcile |
-| constitution-grounded | no | No constitution found |
-| change-footprint-surfaced | no | Greenfield |
-| access-verified | no | No access requirements derived |
+| service-requirements-covered | yes | Not a deployable software service — runtime ACs don't apply |
+| access-granted | yes | No access requirements were derived for this plan |
+| env-buildable | yes | No local-cluster probe ran for this plan |
+| deployment-pipeline-present | yes | No deployment dimension — nothing to ship |
+| enrichment-integrity | yes | No infra adapters ran (disabled / air-gapped) |
+| access-verified | no | No access requirements were derived for this plan |
 
-Each of those is a defensible individual answer. Together they are the shape of
-problem this project has spent a long time learning to distrust: a gate that
-passes because it looked at nothing is indistinguishable, in a summary, from a
-gate that looked and found nothing wrong.
+Each of those is a defensible individual answer, and to the gate's credit each
+one states its reason rather than passing silently. But five hard checks in a row
+concluding that they had nothing to look at is the shape of problem this project
+has spent a long time learning to distrust: in a summary, a gate that passed
+because it examined nothing is indistinguishable from a gate that examined
+something and found it clean.
 
 ## Why publish the bad run
 
