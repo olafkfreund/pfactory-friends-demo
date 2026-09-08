@@ -2,10 +2,11 @@
  * In-process storage for [Profile] records.
  *
  * Data ownership, per constitution P1: the only personal data kept here is the
- * display name and the optional biography. Both are kept for as long as the
- * account exists and are deleted the moment the person calls [deleteAccount] —
- * the biography is part of the same [Profile] record, so it needs no separate
- * cleanup. There is no other copy and no background retention.
+ * display name, the required photo and the optional biography. All three are
+ * kept for as long as the account exists and are deleted the moment the person
+ * calls [deleteAccount] — the photo, like the biography, is part of the same
+ * [Profile] record, so it needs no separate cleanup. There is no other copy and
+ * no background retention.
  *
  * Deletion path, per constitution P2: [deleteAccount] is the in-app deletion
  * path, shipped in this same change rather than deferred. A person can remove
@@ -28,6 +29,11 @@ class ProfileRepository {
      * The biography is optional (a blank one is allowed) but, when present, is
      * rejected if it is longer than [MAX_BIOGRAPHY_LENGTH], measured after
      * trimming.
+     *
+     * The photo format is normalized (trimmed and lowercased) and rejected
+     * unless it names one of [SUPPORTED_PHOTO_FORMATS]; the photo bytes are
+     * rejected if larger than [MAX_PHOTO_SIZE_BYTES]. Both checks throw before
+     * anything is stored.
      */
     fun save(profile: Profile) {
         val trimmed = profile.displayName.trim()
@@ -41,13 +47,22 @@ class ProfileRepository {
         require(trimmedBiography.length <= MAX_BIOGRAPHY_LENGTH) {
             "biography must be at most $MAX_BIOGRAPHY_LENGTH characters"
         }
+        val normalizedPhotoFormat = profile.photo.format.trim().lowercase()
+        require(normalizedPhotoFormat in SUPPORTED_PHOTO_FORMATS) {
+            "photo format must be one of ${SUPPORTED_PHOTO_FORMATS.joinToString(", ")}"
+        }
+        require(profile.photo.bytes.size <= MAX_PHOTO_SIZE_BYTES) {
+            "photo must be at most $MAX_PHOTO_SIZE_BYTES bytes"
+        }
         // Store what was validated. Storing `profile` unchanged here meant the
         // check and the record disagreed: "  Ada  " was measured as 3
         // characters and kept as 7, and a name padded to the limit persisted
-        // over it. The same rule applies to the biography.
+        // over it. The same rule applies to the biography and to the photo
+        // format, which is kept in its normalized form.
         profiles[profile.id] = profile.copy(
             displayName = trimmed,
             biography = trimmedBiography,
+            photo = profile.photo.copy(format = normalizedPhotoFormat),
         )
     }
 
@@ -92,5 +107,38 @@ class ProfileRepository {
          * settled together with the number.
          */
         const val MAX_BIOGRAPHY_LENGTH: Int = 500
+
+        /**
+         * Supported profile photo formats, as normalized (trimmed, lowercase)
+         * format names.
+         *
+         * Placeholder value pending a product decision: the "Supported profile
+         * photo formats and maximum file size" item is still listed under
+         * "Still undecided" in `docs/product-decisions.md`, which asks that code
+         * needing a limit use a single named constant, mark it as a placeholder,
+         * and say so in its PR. Keep it as the single source of truth so the
+         * accepted-format rule lives in exactly one place.
+         *
+         * Membership is tested against the incoming format after the same
+         * normalization (trim + lowercase), so "JPEG" and " png " are accepted
+         * and stored in their normalized form.
+         */
+        val SUPPORTED_PHOTO_FORMATS: Set<String> = setOf("jpeg", "png")
+
+        /**
+         * Maximum allowed profile photo size, measured in bytes.
+         *
+         * Placeholder value pending a product decision: the "Supported profile
+         * photo formats and maximum file size" item is still listed under
+         * "Still undecided" in `docs/product-decisions.md`, which asks that code
+         * needing a limit use a single named constant, mark it as a placeholder,
+         * and say so in its PR. Keep it as the single source of truth so the
+         * size rule lives in exactly one place.
+         *
+         * The unit is raw bytes of the image payload — not kilobytes and not a
+         * decoded-pixel budget. The exact number is part of the same open
+         * decision and should be settled together with the accepted formats.
+         */
+        const val MAX_PHOTO_SIZE_BYTES: Int = 5 * 1024 * 1024
     }
 }

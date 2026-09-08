@@ -6,10 +6,21 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ProfileRepositoryTest {
+    /**
+     * A photo that passes validation: a supported format and a byte payload well
+     * within [ProfileRepository.MAX_PHOTO_SIZE_BYTES]. The photo field is
+     * mandatory, so every saved profile needs one; this keeps the tests focused
+     * on the property under test rather than repeating photo boilerplate.
+     */
+    private fun validPhoto(
+        bytes: ByteArray = byteArrayOf(1, 2, 3, 4),
+        format: String = "png",
+    ): ProfilePhoto = ProfilePhoto(bytes = bytes, format = format)
+
     @Test
     fun `saving a valid display name persists it for an independent read-back`() {
         val repository = ProfileRepository()
-        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace"))
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
 
         val found = repository.find("user-1")
         assertEquals("Ada Lovelace", found?.displayName)
@@ -20,7 +31,7 @@ class ProfileRepositoryTest {
         val repository = ProfileRepository()
 
         assertFailsWith<IllegalArgumentException> {
-            repository.save(Profile(id = "user-1", displayName = "   "))
+            repository.save(Profile(id = "user-1", displayName = "   ", photo = validPhoto()))
         }
         assertNull(repository.find("user-1"))
     }
@@ -28,8 +39,8 @@ class ProfileRepositoryTest {
     @Test
     fun `saving twice for the same id overwrites rather than duplicating`() {
         val repository = ProfileRepository()
-        repository.save(Profile(id = "user-1", displayName = "Grace"))
-        repository.save(Profile(id = "user-1", displayName = "Grace Hopper"))
+        repository.save(Profile(id = "user-1", displayName = "Grace", photo = validPhoto()))
+        repository.save(Profile(id = "user-1", displayName = "Grace Hopper", photo = validPhoto()))
 
         assertEquals("Grace Hopper", repository.find("user-1")?.displayName)
     }
@@ -37,7 +48,7 @@ class ProfileRepositoryTest {
     @Test
     fun `deleteAccount removes the stored profile so a later find returns null`() {
         val repository = ProfileRepository()
-        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace"))
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
 
         assertTrue(repository.deleteAccount("user-1"))
         assertNull(repository.find("user-1"))
@@ -54,7 +65,7 @@ class ProfileRepositoryTest {
     fun `a display name exactly at the maximum length is accepted`() {
         val repository = ProfileRepository()
         val maxName = "a".repeat(ProfileRepository.MAX_DISPLAY_NAME_LENGTH)
-        repository.save(Profile(id = "user-1", displayName = maxName))
+        repository.save(Profile(id = "user-1", displayName = maxName, photo = validPhoto()))
 
         assertEquals(maxName, repository.find("user-1")?.displayName)
     }
@@ -65,7 +76,7 @@ class ProfileRepositoryTest {
         val tooLong = "a".repeat(ProfileRepository.MAX_DISPLAY_NAME_LENGTH + 1)
 
         assertFailsWith<IllegalArgumentException> {
-            repository.save(Profile(id = "user-1", displayName = tooLong))
+            repository.save(Profile(id = "user-1", displayName = tooLong, photo = validPhoto()))
         }
         assertNull(repository.find("user-1"))
     }
@@ -77,7 +88,7 @@ class ProfileRepositoryTest {
         // back with its padding intact. Every other test used clean input, so
         // the suite was green over it.
         val repository = ProfileRepository()
-        repository.save(Profile(id = "user-1", displayName = "  Ada Lovelace  "))
+        repository.save(Profile(id = "user-1", displayName = "  Ada Lovelace  ", photo = validPhoto()))
 
         assertEquals("Ada Lovelace", repository.find("user-1")?.displayName)
     }
@@ -86,7 +97,7 @@ class ProfileRepositoryTest {
     fun `a padded name at the limit is stored within the limit`() {
         val repository = ProfileRepository()
         val padded = "  " + "a".repeat(ProfileRepository.MAX_DISPLAY_NAME_LENGTH) + "  "
-        repository.save(Profile(id = "user-1", displayName = padded))
+        repository.save(Profile(id = "user-1", displayName = padded, photo = validPhoto()))
 
         assertEquals(
             ProfileRepository.MAX_DISPLAY_NAME_LENGTH,
@@ -101,6 +112,7 @@ class ProfileRepositoryTest {
             Profile(
                 id = "user-1",
                 displayName = "Ada Lovelace",
+                photo = validPhoto(),
                 biography = "  Mathematician and first programmer.  ",
             ),
         )
@@ -118,8 +130,85 @@ class ProfileRepositoryTest {
             Profile(
                 id = "user-1",
                 displayName = "Ada Lovelace",
+                photo = validPhoto(),
                 biography = "Mathematician and first programmer.",
             ),
+        )
+
+        assertTrue(repository.deleteAccount("user-1"))
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
+    fun `saving a valid photo persists it for an independent read-back`() {
+        // AC-PROF-002-01: a supported-format, within-limit photo is accepted and
+        // returned back — content-compared — by a separate find() read.
+        val repository = ProfileRepository()
+        val bytes = byteArrayOf(9, 8, 7, 6, 5)
+        repository.save(
+            Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = bytes, format = "png")),
+        )
+
+        val found = repository.find("user-1")?.photo
+        assertEquals("png", found?.format)
+        assertTrue(bytes.contentEquals(found?.bytes ?: byteArrayOf()))
+    }
+
+    @Test
+    fun `a photo format is stored normalized to lowercase and trimmed`() {
+        // Mirrors the displayName-is-trimmed test: the format is validated after
+        // normalization, so the stored value must be the normalized form too.
+        val repository = ProfileRepository()
+        repository.save(
+            Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(format = "  PNG  ")),
+        )
+
+        assertEquals("png", repository.find("user-1")?.photo?.format)
+    }
+
+    @Test
+    fun `saving a photo with an unsupported format throws and persists nothing`() {
+        // AC-PROF-002-02: the format is rejected before anything is stored, and
+        // the error names at least one supported format.
+        val repository = ProfileRepository()
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(format = "gif")))
+        }
+        assertTrue(ProfileRepository.SUPPORTED_PHOTO_FORMATS.any { error.message?.contains(it) == true })
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
+    fun `saving a photo larger than the maximum size throws and persists nothing`() {
+        // AC-PROF-002-03: an oversized photo is rejected before anything is
+        // stored, and the error states the byte limit.
+        val repository = ProfileRepository()
+        val tooBig = ByteArray(ProfileRepository.MAX_PHOTO_SIZE_BYTES + 1)
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = tooBig)))
+        }
+        assertTrue(error.message?.contains(ProfileRepository.MAX_PHOTO_SIZE_BYTES.toString()) == true)
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
+    fun `a photo exactly at the maximum size is accepted`() {
+        val repository = ProfileRepository()
+        val maxBytes = ByteArray(ProfileRepository.MAX_PHOTO_SIZE_BYTES)
+        repository.save(
+            Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = maxBytes)),
+        )
+
+        assertEquals(ProfileRepository.MAX_PHOTO_SIZE_BYTES, repository.find("user-1")?.photo?.bytes?.size)
+    }
+
+    @Test
+    fun `deleteAccount removes the profile including its photo`() {
+        val repository = ProfileRepository()
+        repository.save(
+            Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()),
         )
 
         assertTrue(repository.deleteAccount("user-1"))
