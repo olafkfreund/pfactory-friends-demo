@@ -124,6 +124,27 @@ class ProfileRepositoryTest {
     }
 
     @Test
+    fun `a biography one character over the maximum length throws and persists nothing`() {
+        // AC-PROF-003-02: an over-limit biography is rejected before anything is
+        // stored, and the error states the limit via MAX_BIOGRAPHY_LENGTH.
+        val repository = ProfileRepository()
+        val tooLong = "a".repeat(ProfileRepository.MAX_BIOGRAPHY_LENGTH + 1)
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            repository.save(
+                Profile(
+                    id = "user-1",
+                    displayName = "Ada Lovelace",
+                    photo = validPhoto(),
+                    biography = tooLong,
+                ),
+            )
+        }
+        assertTrue(error.message?.contains(ProfileRepository.MAX_BIOGRAPHY_LENGTH.toString()) == true)
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
     fun `deleteAccount removes the profile including its biography`() {
         val repository = ProfileRepository()
         repository.save(
