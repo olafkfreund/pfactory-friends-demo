@@ -19,9 +19,10 @@ class ProfileRepositoryTest {
     fun `saving a blank display name throws and persists nothing`() {
         val repository = ProfileRepository()
 
-        assertFailsWith<IllegalArgumentException> {
+        val exception = assertFailsWith<IllegalArgumentException> {
             repository.save(Profile(id = "user-1", displayName = "   "))
         }
+        assertTrue(exception.message?.contains("required") == true)
         assertNull(repository.find("user-1"))
     }
 
