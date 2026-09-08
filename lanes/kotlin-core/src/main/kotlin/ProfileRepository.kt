@@ -32,7 +32,11 @@ class ProfileRepository {
         require(trimmed.length <= MAX_DISPLAY_NAME_LENGTH) {
             "displayName must be at most $MAX_DISPLAY_NAME_LENGTH characters"
         }
-        profiles[profile.id] = profile
+        // Store what was validated. Storing `profile` unchanged here meant the
+        // check and the record disagreed: "  Ada  " was measured as 3
+        // characters and kept as 7, and a name padded to the limit persisted
+        // over it.
+        profiles[profile.id] = profile.copy(displayName = trimmed)
     }
 
     /** Returns the stored [Profile] for [id], or null if none exists. */
@@ -51,6 +55,12 @@ class ProfileRepository {
          * Placeholder value pending a product decision: no validated product
          * requirement has fixed this limit yet. Keep it as the single source of
          * truth so the length rule lives in exactly one place.
+         *
+         * The unit is Kotlin's `String.length` — UTF-16 code units, not
+         * user-perceived characters. A name of 50 emoji is 100 units and is
+         * rejected, as is a shorter CJK name than a Latin one. Whether the
+         * product limit means code units, code points or grapheme clusters is
+         * part of the same open decision and should be settled with the number.
          */
         const val MAX_DISPLAY_NAME_LENGTH: Int = 50
     }
