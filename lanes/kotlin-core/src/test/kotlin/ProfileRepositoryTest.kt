@@ -69,4 +69,28 @@ class ProfileRepositoryTest {
         }
         assertNull(repository.find("user-1"))
     }
+
+    @Test
+    fun `a display name is stored without its surrounding whitespace`() {
+        // The validation trimmed the name and the store kept the original, so
+        // "  Ada  " passed a length check it did not actually satisfy and came
+        // back with its padding intact. Every other test used clean input, so
+        // the suite was green over it.
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "  Ada Lovelace  "))
+
+        assertEquals("Ada Lovelace", repository.find("user-1")?.displayName)
+    }
+
+    @Test
+    fun `a padded name at the limit is stored within the limit`() {
+        val repository = ProfileRepository()
+        val padded = "  " + "a".repeat(ProfileRepository.MAX_DISPLAY_NAME_LENGTH) + "  "
+        repository.save(Profile(id = "user-1", displayName = padded))
+
+        assertEquals(
+            ProfileRepository.MAX_DISPLAY_NAME_LENGTH,
+            repository.find("user-1")?.displayName?.length,
+        )
+    }
 }

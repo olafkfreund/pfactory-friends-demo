@@ -1,0 +1,55 @@
+# Runs the kotlin-core lane's tests on every PR.
+#
+# Until this existed, nothing in this repository compiled a line of Kotlin. The
+# build sandbox that authors these changes has no JVM, so an agent can only
+# review its own code statically and say so; PR #35 was opened with code no
+# machine had built. This is the gate that closes that.
+name: kotlin-core
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: kotlin-core (gradle test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: lanes/kotlin-core
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Run tests
+        run: gradle test --no-daemon
+
+      # A green `gradle test` that executed zero tests is indistinguishable from
+      # a clean run, so assert the count rather than trusting the exit code.
+      - name: Assert tests actually ran
+        if: always()
+        run: |
+          shopt -s nullglob
+          files=(build/test-results/test/*.xml)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::no JUnit XML produced - no tests ran"; exit 1
+          fi
+          total=$(grep -ho 'tests="[0-9]*"' "${files[@]}" | grep -o '[0-9]*' | paste -sd+ | bc)
+          echo "executed $total tests across ${#files[@]} class(es)"
+          if [ "${total:-0}" -lt 1 ]; then
+            echo "::error::JUnit XML reports $total tests"; exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kotlin-core-test-results
+          path: lanes/kotlin-core/build/test-results/test/
