@@ -27,7 +27,7 @@ class ProfileRepository {
     fun save(profile: Profile) {
         val trimmed = profile.displayName.trim()
         require(trimmed.isNotEmpty()) {
-            "displayName must not be blank"
+            "displayName is required and must not be blank"
         }
         require(trimmed.length <= MAX_DISPLAY_NAME_LENGTH) {
             "displayName must be at most $MAX_DISPLAY_NAME_LENGTH characters"
