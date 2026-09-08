@@ -93,4 +93,36 @@ class ProfileRepositoryTest {
             repository.find("user-1")?.displayName?.length,
         )
     }
+
+    @Test
+    fun `saving a biography within the limit persists the trimmed value`() {
+        val repository = ProfileRepository()
+        repository.save(
+            Profile(
+                id = "user-1",
+                displayName = "Ada Lovelace",
+                biography = "  Mathematician and first programmer.  ",
+            ),
+        )
+
+        assertEquals(
+            "Mathematician and first programmer.",
+            repository.find("user-1")?.biography,
+        )
+    }
+
+    @Test
+    fun `deleteAccount removes the profile including its biography`() {
+        val repository = ProfileRepository()
+        repository.save(
+            Profile(
+                id = "user-1",
+                displayName = "Ada Lovelace",
+                biography = "Mathematician and first programmer.",
+            ),
+        )
+
+        assertTrue(repository.deleteAccount("user-1"))
+        assertNull(repository.find("user-1"))
+    }
 }
