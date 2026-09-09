@@ -1,21 +1,30 @@
 /**
- * A user profile. The minimal shape: an identity, a name to show, a required
+ * A user profile. The minimal shape: an identity, a name to show, an optional
  * photo, and an optional short biography.
  *
- * [displayName] and [photo] are required attributes: a profile cannot be
- * created without them. [biography] is optional: a profile can be created
- * without one, in which case it defaults to the empty string. [interests] and
- * [activities] are optional lists that default to empty. Other attributes
- * (age, location) are intentionally out of scope here.
+ * [displayName] is a required attribute: a profile cannot be created without
+ * it. [photo] is optional: a profile can be created without one, in which case
+ * it defaults to `null` and the profile is considered incomplete (see
+ * [isComplete]). [biography] is optional: a profile can be created without one,
+ * in which case it defaults to the empty string. [interests] and [activities]
+ * are optional lists that default to empty. Other attributes (age, location)
+ * are intentionally out of scope here.
  */
 data class Profile(
     val id: String,
     val displayName: String,
-    val photo: ProfilePhoto,
+    val photo: ProfilePhoto? = null,
     val biography: String = "",
     val interests: List<String> = emptyList(),
     val activities: List<String> = emptyList(),
-)
+) {
+    /**
+     * Whether the profile is complete. A profile is complete only when it has
+     * a [photo].
+     */
+    val isComplete: Boolean
+        get() = photo != null
+}
 
 /**
  * A profile photo: the raw image [bytes] and the image [format] (e.g. "jpeg",
