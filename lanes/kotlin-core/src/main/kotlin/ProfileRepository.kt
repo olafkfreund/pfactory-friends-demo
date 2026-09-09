@@ -34,8 +34,13 @@ class ProfileRepository {
      * unless it names one of [SUPPORTED_PHOTO_FORMATS]; the photo bytes are
      * rejected if larger than [MAX_PHOTO_SIZE_BYTES]. Both checks throw before
      * anything is stored.
+     *
+     * Returns a [SaveConfirmation] carrying [SAVE_SUCCESS_MESSAGE] once the
+     * profile is stored (AC-PROF-020-01). Because every [require] runs first and
+     * throws before anything is stored, a validation failure never reaches this
+     * point and so never produces a confirmation.
      */
-    fun save(profile: Profile) {
+    fun save(profile: Profile): SaveConfirmation {
         val trimmed = profile.displayName.trim()
         require(trimmed.isNotEmpty()) {
             "displayName must not be blank"
@@ -64,6 +69,7 @@ class ProfileRepository {
             biography = trimmedBiography,
             photo = profile.photo.copy(format = normalizedPhotoFormat),
         )
+        return SaveConfirmation(SAVE_SUCCESS_MESSAGE)
     }
 
     /** Returns the stored [Profile] for [id], or null if none exists. */
@@ -76,6 +82,18 @@ class ProfileRepository {
     fun deleteAccount(id: String): Boolean = profiles.remove(id) != null
 
     companion object {
+        /**
+         * The message carried by the [SaveConfirmation] a successful [save]
+         * returns (AC-PROF-020-01).
+         *
+         * Not a settled product decision and not listed in
+         * `docs/product-decisions.md`'s "Still undecided" table, so this is a
+         * reasonable default rather than a new blocking decision. Kept here as
+         * the single source of truth so a future UI and the tests agree on the
+         * wording.
+         */
+        const val SAVE_SUCCESS_MESSAGE: String = "Profile saved successfully"
+
         /**
          * Maximum allowed display-name length, measured after trimming.
          *
@@ -142,3 +160,15 @@ class ProfileRepository {
         const val MAX_PHOTO_SIZE_BYTES: Int = 5 * 1024 * 1024
     }
 }
+
+/**
+ * The success confirmation produced by [ProfileRepository.save] once a profile
+ * has been persisted (AC-PROF-020-01).
+ *
+ * This codebase has no UI layer yet, so the "clear success confirmation" a UI
+ * would show is modeled here as the value returned from the save boundary: a
+ * confirmation only ever exists after a successful store, so a validation
+ * failure (which throws before the store) produces no [SaveConfirmation]. A
+ * future UI can render [message] verbatim.
+ */
+data class SaveConfirmation(val message: String)
