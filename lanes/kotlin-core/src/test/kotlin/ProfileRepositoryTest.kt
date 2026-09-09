@@ -17,10 +17,18 @@ class ProfileRepositoryTest {
         format: String = "png",
     ): ProfilePhoto = ProfilePhoto(bytes = bytes, format = format)
 
+    /**
+     * An age that passes validation: exactly [ProfileRepository.MIN_AGE], the
+     * confirmed 16+ boundary. The age field is mandatory, so every saved profile
+     * needs one; this keeps the tests focused on the property under test rather
+     * than repeating age boilerplate. Mirrors [validPhoto].
+     */
+    private fun validAge(): Int = ProfileRepository.MIN_AGE
+
     @Test
     fun `saving a valid display name persists it for an independent read-back`() {
         val repository = ProfileRepository()
-        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = validAge()))
 
         val found = repository.find("user-1")
         assertEquals("Ada Lovelace", found?.displayName)
@@ -31,7 +39,7 @@ class ProfileRepositoryTest {
         val repository = ProfileRepository()
 
         assertFailsWith<IllegalArgumentException> {
-            repository.save(Profile(id = "user-1", displayName = "   ", photo = validPhoto()))
+            repository.save(Profile(id = "user-1", displayName = "   ", photo = validPhoto(), age = validAge()))
         }
         assertNull(repository.find("user-1"))
     }
@@ -39,8 +47,8 @@ class ProfileRepositoryTest {
     @Test
     fun `saving twice for the same id overwrites rather than duplicating`() {
         val repository = ProfileRepository()
-        repository.save(Profile(id = "user-1", displayName = "Grace", photo = validPhoto()))
-        repository.save(Profile(id = "user-1", displayName = "Grace Hopper", photo = validPhoto()))
+        repository.save(Profile(id = "user-1", displayName = "Grace", photo = validPhoto(), age = validAge()))
+        repository.save(Profile(id = "user-1", displayName = "Grace Hopper", photo = validPhoto(), age = validAge()))
 
         assertEquals("Grace Hopper", repository.find("user-1")?.displayName)
     }
@@ -48,7 +56,7 @@ class ProfileRepositoryTest {
     @Test
     fun `deleteAccount removes the stored profile so a later find returns null`() {
         val repository = ProfileRepository()
-        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = validAge()))
 
         assertTrue(repository.deleteAccount("user-1"))
         assertNull(repository.find("user-1"))
@@ -65,7 +73,7 @@ class ProfileRepositoryTest {
     fun `a display name exactly at the maximum length is accepted`() {
         val repository = ProfileRepository()
         val maxName = "a".repeat(ProfileRepository.MAX_DISPLAY_NAME_LENGTH)
-        repository.save(Profile(id = "user-1", displayName = maxName, photo = validPhoto()))
+        repository.save(Profile(id = "user-1", displayName = maxName, photo = validPhoto(), age = validAge()))
 
         assertEquals(maxName, repository.find("user-1")?.displayName)
     }
@@ -76,7 +84,7 @@ class ProfileRepositoryTest {
         val tooLong = "a".repeat(ProfileRepository.MAX_DISPLAY_NAME_LENGTH + 1)
 
         assertFailsWith<IllegalArgumentException> {
-            repository.save(Profile(id = "user-1", displayName = tooLong, photo = validPhoto()))
+            repository.save(Profile(id = "user-1", displayName = tooLong, photo = validPhoto(), age = validAge()))
         }
         assertNull(repository.find("user-1"))
     }
@@ -88,7 +96,7 @@ class ProfileRepositoryTest {
         // back with its padding intact. Every other test used clean input, so
         // the suite was green over it.
         val repository = ProfileRepository()
-        repository.save(Profile(id = "user-1", displayName = "  Ada Lovelace  ", photo = validPhoto()))
+        repository.save(Profile(id = "user-1", displayName = "  Ada Lovelace  ", photo = validPhoto(), age = validAge()))
 
         assertEquals("Ada Lovelace", repository.find("user-1")?.displayName)
     }
@@ -97,7 +105,7 @@ class ProfileRepositoryTest {
     fun `a padded name at the limit is stored within the limit`() {
         val repository = ProfileRepository()
         val padded = "  " + "a".repeat(ProfileRepository.MAX_DISPLAY_NAME_LENGTH) + "  "
-        repository.save(Profile(id = "user-1", displayName = padded, photo = validPhoto()))
+        repository.save(Profile(id = "user-1", displayName = padded, photo = validPhoto(), age = validAge()))
 
         assertEquals(
             ProfileRepository.MAX_DISPLAY_NAME_LENGTH,
@@ -113,6 +121,7 @@ class ProfileRepositoryTest {
                 id = "user-1",
                 displayName = "Ada Lovelace",
                 photo = validPhoto(),
+                age = validAge(),
                 biography = "  Mathematician and first programmer.  ",
             ),
         )
@@ -136,6 +145,7 @@ class ProfileRepositoryTest {
                     id = "user-1",
                     displayName = "Ada Lovelace",
                     photo = validPhoto(),
+                    age = validAge(),
                     biography = tooLong,
                 ),
             )
@@ -152,6 +162,7 @@ class ProfileRepositoryTest {
                 id = "user-1",
                 displayName = "Ada Lovelace",
                 photo = validPhoto(),
+                age = validAge(),
                 biography = "Mathematician and first programmer.",
             ),
         )
@@ -167,7 +178,12 @@ class ProfileRepositoryTest {
         val repository = ProfileRepository()
         val bytes = byteArrayOf(9, 8, 7, 6, 5)
         repository.save(
-            Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = bytes, format = "png")),
+            Profile(
+                id = "user-1",
+                displayName = "Ada Lovelace",
+                photo = validPhoto(bytes = bytes, format = "png"),
+                age = validAge(),
+            ),
         )
 
         val found = repository.find("user-1")?.photo
@@ -181,7 +197,7 @@ class ProfileRepositoryTest {
         // normalization, so the stored value must be the normalized form too.
         val repository = ProfileRepository()
         repository.save(
-            Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(format = "  PNG  ")),
+            Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(format = "  PNG  "), age = validAge()),
         )
 
         assertEquals("png", repository.find("user-1")?.photo?.format)
@@ -194,7 +210,9 @@ class ProfileRepositoryTest {
         val repository = ProfileRepository()
 
         val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(format = "gif")))
+            repository.save(
+                Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(format = "gif"), age = validAge()),
+            )
         }
         assertTrue(ProfileRepository.SUPPORTED_PHOTO_FORMATS.any { error.message?.contains(it) == true })
         assertNull(repository.find("user-1"))
@@ -208,7 +226,9 @@ class ProfileRepositoryTest {
         val tooBig = ByteArray(ProfileRepository.MAX_PHOTO_SIZE_BYTES + 1)
 
         val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = tooBig)))
+            repository.save(
+                Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = tooBig), age = validAge()),
+            )
         }
         assertTrue(error.message?.contains(ProfileRepository.MAX_PHOTO_SIZE_BYTES.toString()) == true)
         assertNull(repository.find("user-1"))
@@ -219,7 +239,7 @@ class ProfileRepositoryTest {
         val repository = ProfileRepository()
         val maxBytes = ByteArray(ProfileRepository.MAX_PHOTO_SIZE_BYTES)
         repository.save(
-            Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = maxBytes)),
+            Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = maxBytes), age = validAge()),
         )
 
         assertEquals(ProfileRepository.MAX_PHOTO_SIZE_BYTES, repository.find("user-1")?.photo?.bytes?.size)
@@ -229,7 +249,78 @@ class ProfileRepositoryTest {
     fun `deleteAccount removes the profile including its photo`() {
         val repository = ProfileRepository()
         repository.save(
-            Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()),
+            Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = validAge()),
+        )
+
+        assertTrue(repository.deleteAccount("user-1"))
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
+    fun `saving a valid age persists it for an independent read-back`() {
+        // AC-PROF-004-01: an age at or above MIN_AGE is accepted and returned by
+        // a separate find() read.
+        val repository = ProfileRepository()
+        val age = ProfileRepository.MIN_AGE + 10
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = age))
+
+        assertEquals(age, repository.find("user-1")?.age)
+    }
+
+    @Test
+    fun `an age exactly at the minimum is accepted`() {
+        // AC-PROF-004-01: the 16+ boundary is inclusive, so exactly MIN_AGE is
+        // accepted and persisted.
+        val repository = ProfileRepository()
+        repository.save(
+            Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = ProfileRepository.MIN_AGE),
+        )
+
+        assertEquals(ProfileRepository.MIN_AGE, repository.find("user-1")?.age)
+    }
+
+    @Test
+    fun `an age below the minimum throws and persists nothing`() {
+        // AC-PROF-004-02: an under-age profile is rejected before anything is
+        // stored, and the error states the minimum via MIN_AGE.
+        val repository = ProfileRepository()
+        val tooYoung = ProfileRepository.MIN_AGE - 1
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            repository.save(
+                Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = tooYoung),
+            )
+        }
+        assertTrue(error.message?.contains(ProfileRepository.MIN_AGE.toString()) == true)
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
+    fun `an age above the maximum throws and persists nothing`() {
+        // Guards the MAX_AGE placeholder plausibility bound: an implausibly large
+        // numeric age is rejected before anything is stored, and the error states
+        // the maximum via MAX_AGE.
+        //
+        // Note: AC-PROF-004-03 (non-numeric age) is not naturally coverable at
+        // this layer because Profile.age is a compile-time Int — the type system
+        // already prevents non-numeric values from ever reaching save().
+        val repository = ProfileRepository()
+        val tooOld = ProfileRepository.MAX_AGE + 1
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            repository.save(
+                Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = tooOld),
+            )
+        }
+        assertTrue(error.message?.contains(ProfileRepository.MAX_AGE.toString()) == true)
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
+    fun `deleteAccount removes the profile including its age`() {
+        val repository = ProfileRepository()
+        repository.save(
+            Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = validAge()),
         )
 
         assertTrue(repository.deleteAccount("user-1"))
