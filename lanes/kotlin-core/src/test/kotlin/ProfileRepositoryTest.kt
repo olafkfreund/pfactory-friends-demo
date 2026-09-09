@@ -235,4 +235,42 @@ class ProfileRepositoryTest {
         assertTrue(repository.deleteAccount("user-1"))
         assertNull(repository.find("user-1"))
     }
+
+    @Test
+    fun `a freshly saved profile with a photo is complete`() {
+        // Sanity: the mandatory photo makes the profile complete.
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertTrue(repository.find("user-1")?.isComplete == true)
+    }
+
+    @Test
+    fun `removePhoto clears the photo of an existing profile`() {
+        // AC-PROF-019-02: removing a photo from an existing profile leaves the
+        // profile in place but with no photo.
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertTrue(repository.removePhoto("user-1"))
+        assertNull(repository.find("user-1")?.photo)
+    }
+
+    @Test
+    fun `removePhoto leaves the profile incomplete`() {
+        // AC-PROF-019-02: a mandatory photo is now missing, so completeness must
+        // flip to incomplete rather than silently staying complete.
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertTrue(repository.removePhoto("user-1"))
+        assertFalse(repository.find("user-1")?.isComplete == true)
+    }
+
+    @Test
+    fun `removePhoto on an unknown id returns false without throwing`() {
+        val repository = ProfileRepository()
+
+        assertFalse(repository.removePhoto("never-saved"))
+    }
 }
