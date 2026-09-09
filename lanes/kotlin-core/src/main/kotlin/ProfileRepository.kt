@@ -2,11 +2,13 @@
  * In-process storage for [Profile] records.
  *
  * Data ownership, per constitution P1: the only personal data kept here is the
- * display name, the required photo and the optional biography. All three are
- * kept for as long as the account exists and are deleted the moment the person
- * calls [deleteAccount] — the photo, like the biography, is part of the same
- * [Profile] record, so it needs no separate cleanup. There is no other copy and
- * no background retention.
+ * display name, the required photo, the required age and the optional
+ * biography. All of them are kept for as long as the account exists and are
+ * deleted the moment the person calls [deleteAccount] — the age, like the photo
+ * and the biography, is part of the same [Profile] record, so it needs no
+ * separate cleanup. There is no other copy and no background retention: age is
+ * retained exactly like the display name, biography and photo, with no separate
+ * or background store of its own.
  *
  * Deletion path, per constitution P2: [deleteAccount] is the in-app deletion
  * path, shipped in this same change rather than deferred. A person can remove
@@ -34,6 +36,13 @@ class ProfileRepository {
      * unless it names one of [SUPPORTED_PHOTO_FORMATS]; the photo bytes are
      * rejected if larger than [MAX_PHOTO_SIZE_BYTES]. Both checks throw before
      * anything is stored.
+     *
+     * The age is rejected if below [MIN_AGE] (the confirmed 16+ product
+     * decision) or above [MAX_AGE] (a placeholder plausibility bound), each
+     * check throwing before anything is stored. Because [Profile.age] is a
+     * Kotlin `Int`, non-numeric input cannot reach this method at all — that
+     * constraint is enforced at compile time, so the only age validation left
+     * to do here is the numeric range.
      */
     fun save(profile: Profile) {
         val trimmed = profile.displayName.trim()
@@ -54,15 +63,23 @@ class ProfileRepository {
         require(profile.photo.bytes.size <= MAX_PHOTO_SIZE_BYTES) {
             "photo must be at most $MAX_PHOTO_SIZE_BYTES bytes"
         }
+        require(profile.age >= MIN_AGE) {
+            "age must be at least $MIN_AGE"
+        }
+        require(profile.age <= MAX_AGE) {
+            "age must be at most $MAX_AGE"
+        }
         // Store what was validated. Storing `profile` unchanged here meant the
         // check and the record disagreed: "  Ada  " was measured as 3
         // characters and kept as 7, and a name padded to the limit persisted
         // over it. The same rule applies to the biography and to the photo
-        // format, which is kept in its normalized form.
+        // format, which is kept in its normalized form. The age is already a
+        // validated `Int`, so it is copied through as-is.
         profiles[profile.id] = profile.copy(
             displayName = trimmed,
             biography = trimmedBiography,
             photo = profile.photo.copy(format = normalizedPhotoFormat),
+            age = profile.age,
         )
     }
 
@@ -140,5 +157,40 @@ class ProfileRepository {
          * decision and should be settled together with the accepted formats.
          */
         const val MAX_PHOTO_SIZE_BYTES: Int = 5 * 1024 * 1024
+
+        /**
+         * Minimum age, in whole years, required to create a profile.
+         *
+         * CONFIRMED product decision — unlike the placeholder constants above
+         * ([MAX_DISPLAY_NAME_LENGTH], [MAX_BIOGRAPHY_LENGTH],
+         * [SUPPORTED_PHOTO_FORMATS], [MAX_PHOTO_SIZE_BYTES]), whose numbers are
+         * still open, this value is fixed. `docs/product-decisions.md` (decided
+         * 2026-09-08, item 1 of the five blocking questions) records the answer
+         * as: "Minimum age to create a profile: 16+". The 16+ boundary is
+         * inclusive, matching the "16+" wording, so exactly 16 is accepted.
+         *
+         * Note the deliberate, accepted gap recorded in the same document:
+         * 16- and 17-year-olds are children in law and the ICO Age Appropriate
+         * Design Code would apply, but the child-specific defaults (geolocation
+         * and profiling off by default, explicit opt-in) are explicitly out of
+         * scope here and are not implemented in this change.
+         */
+        const val MIN_AGE: Int = 16
+
+        /**
+         * Maximum age, in whole years, accepted as a plausibility upper bound.
+         *
+         * Placeholder value pending a product decision: the "Maximum age /
+         * plausibility upper bound" item is still listed under "Still undecided"
+         * in `docs/product-decisions.md`, which asks that code needing a limit
+         * use a single named constant, mark it as a placeholder, and say so in
+         * its PR. Keep it as the single source of truth so the upper-bound rule
+         * lives in exactly one place.
+         *
+         * It exists so an implausibly large numeric age is rejected rather than
+         * stored; the exact number is not a validated product requirement and
+         * should be settled together with the "Maximum age" decision.
+         */
+        const val MAX_AGE: Int = 120
     }
 }
