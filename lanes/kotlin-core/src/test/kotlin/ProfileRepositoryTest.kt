@@ -235,4 +235,32 @@ class ProfileRepositoryTest {
         assertTrue(repository.deleteAccount("user-1"))
         assertNull(repository.find("user-1"))
     }
+
+    @Test
+    fun `saving a valid profile returns a success confirmation`() {
+        // AC-PROF-020-01: a successful save produces a clear, non-blank success
+        // confirmation carrying the shared SAVE_SUCCESS_MESSAGE, and it exists
+        // only after the profile has actually been persisted.
+        val repository = ProfileRepository()
+
+        val confirmation =
+            repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertEquals(ProfileRepository.SAVE_SUCCESS_MESSAGE, confirmation.message)
+        assertTrue(confirmation.message.isNotBlank())
+        assertEquals("Ada Lovelace", repository.find("user-1")?.displayName)
+    }
+
+    @Test
+    fun `a failed save throws before producing any confirmation`() {
+        // AC-PROF-020-01: a validation failure (blank display name) throws
+        // before any SaveConfirmation is created, so nothing is persisted and no
+        // confirmation is returned.
+        val repository = ProfileRepository()
+
+        assertFailsWith<IllegalArgumentException> {
+            repository.save(Profile(id = "user-1", displayName = "   ", photo = validPhoto()))
+        }
+        assertNull(repository.find("user-1"))
+    }
 }
