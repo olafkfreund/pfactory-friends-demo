@@ -27,6 +27,29 @@ class ProfileRepositoryTest {
     }
 
     @Test
+    fun `saving a blank id throws and persists nothing`() {
+        // AC for issue #36, item 1: an empty id is rejected rather than
+        // silently storing a profile under the "" key.
+        val repository = ProfileRepository()
+
+        assertFailsWith<IllegalArgumentException> {
+            repository.save(Profile(id = "", displayName = "Ada Lovelace", photo = validPhoto()))
+        }
+        assertNull(repository.find(""))
+    }
+
+    @Test
+    fun `saving a whitespace-only id throws and persists nothing`() {
+        // AC for issue #36, item 1: "   " is whitespace, not a real id.
+        val repository = ProfileRepository()
+
+        assertFailsWith<IllegalArgumentException> {
+            repository.save(Profile(id = "   ", displayName = "Ada Lovelace", photo = validPhoto()))
+        }
+        assertNull(repository.find("   "))
+    }
+
+    @Test
     fun `saving a blank display name throws and persists nothing`() {
         val repository = ProfileRepository()
 
@@ -77,6 +100,53 @@ class ProfileRepositoryTest {
 
         assertFailsWith<IllegalArgumentException> {
             repository.save(Profile(id = "user-1", displayName = tooLong, photo = validPhoto()))
+        }
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
+    fun `a display name containing a newline throws and persists nothing`() {
+        // AC for issue #36, item 2: a newline is a display-spoofing / log
+        // -injection surface once the name is rendered in lists, notifications
+        // and logs.
+        val repository = ProfileRepository()
+
+        assertFailsWith<IllegalArgumentException> {
+            repository.save(Profile(id = "user-1", displayName = "Ada\nLovelace", photo = validPhoto()))
+        }
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
+    fun `a display name containing a carriage return throws and persists nothing`() {
+        val repository = ProfileRepository()
+
+        assertFailsWith<IllegalArgumentException> {
+            repository.save(Profile(id = "user-1", displayName = "Ada\rLovelace", photo = validPhoto()))
+        }
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
+    fun `a display name of 50 simple emoji at the maximum length is accepted`() {
+        // AC for issue #36, item 3: with the length measured in UTF-16 code
+        // units, 50 emoji (100 units) were wrongly rejected. Measured in code
+        // points, 50 single-code-point emoji is exactly the limit.
+        val repository = ProfileRepository()
+        val fiftyEmoji = "😀".repeat(ProfileRepository.MAX_DISPLAY_NAME_LENGTH)
+
+        repository.save(Profile(id = "user-1", displayName = fiftyEmoji, photo = validPhoto()))
+
+        assertEquals(fiftyEmoji, repository.find("user-1")?.displayName)
+    }
+
+    @Test
+    fun `a display name of 51 simple emoji over the maximum length throws`() {
+        val repository = ProfileRepository()
+        val fiftyOneEmoji = "😀".repeat(ProfileRepository.MAX_DISPLAY_NAME_LENGTH + 1)
+
+        assertFailsWith<IllegalArgumentException> {
+            repository.save(Profile(id = "user-1", displayName = fiftyOneEmoji, photo = validPhoto()))
         }
         assertNull(repository.find("user-1"))
     }
