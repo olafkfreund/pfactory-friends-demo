@@ -34,6 +34,10 @@ class ProfileRepository {
      * unless it names one of [SUPPORTED_PHOTO_FORMATS]; the photo bytes are
      * rejected if larger than [MAX_PHOTO_SIZE_BYTES]. Both checks throw before
      * anything is stored.
+     *
+     * The interests and activities lists are optional (empty is allowed) but
+     * are rejected if they hold more than [MAX_INTERESTS] and [MAX_ACTIVITIES]
+     * entries respectively; each check throws before anything is stored.
      */
     fun save(profile: Profile) {
         val trimmed = profile.displayName.trim()
@@ -53,6 +57,12 @@ class ProfileRepository {
         }
         require(profile.photo.bytes.size <= MAX_PHOTO_SIZE_BYTES) {
             "photo must be at most $MAX_PHOTO_SIZE_BYTES bytes"
+        }
+        require(profile.interests.size <= MAX_INTERESTS) {
+            "interests must be at most $MAX_INTERESTS entries"
+        }
+        require(profile.activities.size <= MAX_ACTIVITIES) {
+            "activities must be at most $MAX_ACTIVITIES entries"
         }
         // Store what was validated. Storing `profile` unchanged here meant the
         // check and the record disagreed: "  Ada  " was measured as 3
@@ -140,5 +150,33 @@ class ProfileRepository {
          * decision and should be settled together with the accepted formats.
          */
         const val MAX_PHOTO_SIZE_BYTES: Int = 5 * 1024 * 1024
+
+        /**
+         * Maximum allowed number of interests on a profile.
+         *
+         * Placeholder value pending a product decision: no validated product
+         * requirement has fixed this limit yet. Per `docs/product-decisions.md`,
+         * code needing a limit should use a single named constant, mark it as a
+         * placeholder, and say so in its PR. Keep it as the single source of
+         * truth so the count rule lives in exactly one place.
+         *
+         * The unit is entry count — the number of items in the list, with no
+         * per-entry length or content rule implied here.
+         */
+        const val MAX_INTERESTS: Int = 10
+
+        /**
+         * Maximum allowed number of activities on a profile.
+         *
+         * Placeholder value pending a product decision: no validated product
+         * requirement has fixed this limit yet. Per `docs/product-decisions.md`,
+         * code needing a limit should use a single named constant, mark it as a
+         * placeholder, and say so in its PR. Keep it as the single source of
+         * truth so the count rule lives in exactly one place.
+         *
+         * The unit is entry count — the number of items in the list, with no
+         * per-entry length or content rule implied here.
+         */
+        const val MAX_ACTIVITIES: Int = 10
     }
 }
