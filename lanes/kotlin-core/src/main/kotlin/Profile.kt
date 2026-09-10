@@ -4,14 +4,17 @@
  *
  * [displayName] and [photo] are required attributes: a profile cannot be
  * created without them. [biography] is optional: a profile can be created
- * without one, in which case it defaults to the empty string. Other attributes
- * (age, location, interests) are intentionally out of scope here.
+ * without one, in which case it defaults to the empty string. [interests] and
+ * [activities] are optional lists that default to empty. Other attributes
+ * (age, location) are intentionally out of scope here.
  */
 data class Profile(
     val id: String,
     val displayName: String,
     val photo: ProfilePhoto,
     val biography: String = "",
+    val interests: List<String> = emptyList(),
+    val activities: List<String> = emptyList(),
 )
 
 /**
