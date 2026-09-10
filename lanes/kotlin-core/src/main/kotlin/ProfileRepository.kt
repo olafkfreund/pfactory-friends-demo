@@ -23,8 +23,13 @@ class ProfileRepository {
      * Persists [profile], overwriting any existing record with the same id
      * (update semantics, not duplicate-create).
      *
-     * Rejects a blank/whitespace-only display name and one longer than
-     * [MAX_DISPLAY_NAME_LENGTH], throwing before anything is stored.
+     * Rejects a blank/whitespace-only id (see [save]'s implementation comment
+     * for why -- this is a floor, not the full id-format decision).
+     *
+     * Rejects a blank/whitespace-only display name, one containing a control
+     * character (including a newline), and one longer than
+     * [MAX_DISPLAY_NAME_LENGTH] Unicode code points, throwing before anything
+     * is stored.
      *
      * The biography is optional (a blank one is allowed) but, when present, is
      * rejected if it is longer than [MAX_BIOGRAPHY_LENGTH], measured after
@@ -36,11 +41,35 @@ class ProfileRepository {
      * anything is stored.
      */
     fun save(profile: Profile) {
+        // The id is not covered by any product decision (issue #36, item 1):
+        // nothing in the plan or in docs/product-decisions.md says whether the
+        // domain layer validates it or trusts it as an already-authenticated
+        // value from the auth layer. Rejecting a blank/whitespace-only id is a
+        // minimal, uncontroversial floor either way -- it prevents every
+        // profile from silently colliding on the same "" or "   " map key --
+        // and does not attempt to decide id *format* (opaque token vs UUID vs
+        // something else), which is the actual open question and still needs a
+        // product/eng answer.
+        require(profile.id.isNotBlank()) {
+            "id must not be blank"
+        }
         val trimmed = profile.displayName.trim()
         require(trimmed.isNotEmpty()) {
             "displayName must not be blank"
         }
-        require(trimmed.length <= MAX_DISPLAY_NAME_LENGTH) {
+        // Control characters (including newlines and carriage returns) are
+        // rejected outright. docs/product-decisions.md lists "Permitted
+        // characters in a display name" as still undecided, but a newline in a
+        // name that gets rendered in lists, notifications and logs is a
+        // display-spoofing / log-injection surface regardless of where the
+        // final character-set policy lands (issue #36, item 2). This is a
+        // minimal, defensible floor -- it does not attempt the fuller policy
+        // the issue also flags (e.g. bidi override characters), which needs a
+        // product decision on the complete permitted-character set.
+        require(trimmed.none { it.isISOControl() }) {
+            "displayName must not contain control characters"
+        }
+        require(trimmed.codePointCount(0, trimmed.length) <= MAX_DISPLAY_NAME_LENGTH) {
             "displayName must be at most $MAX_DISPLAY_NAME_LENGTH characters"
         }
         val trimmedBiography = profile.biography.trim()
@@ -77,17 +106,31 @@ class ProfileRepository {
 
     companion object {
         /**
-         * Maximum allowed display-name length, measured after trimming.
+         * Maximum allowed display-name length, measured after trimming, in
+         * Unicode code points (see below).
          *
          * Placeholder value pending a product decision: no validated product
-         * requirement has fixed this limit yet. Keep it as the single source of
-         * truth so the length rule lives in exactly one place.
+         * requirement has fixed this limit yet, and it is still listed under
+         * "Still undecided" in docs/product-decisions.md. Keep it as the single
+         * source of truth so the length rule lives in exactly one place.
          *
-         * The unit is Kotlin's `String.length` — UTF-16 code units, not
-         * user-perceived characters. A name of 50 emoji is 100 units and is
-         * rejected, as is a shorter CJK name than a Latin one. Whether the
-         * product limit means code units, code points or grapheme clusters is
-         * part of the same open decision and should be settled with the number.
+         * NEEDS PRODUCT CONFIRMATION -- unit choice (issue #36, item 3): this
+         * was measured with `String.length` (UTF-16 code units), which rejected
+         * a name of 50 simple emoji as 100 "characters" and cut CJK names
+         * shorter, in user-perceived characters, than Latin ones. It is now
+         * measured with `codePointCount`, counting Unicode code points instead:
+         * an improvement (most emoji and all CJK characters are one code point
+         * each, so a straightforward Latin/CJK/simple-emoji name of 50
+         * characters is now accepted), chosen over grapheme clusters because
+         * the JVM standard library has no built-in grapheme-cluster counter
+         * (one exists via `java.text.BreakIterator`, but pulling that in is
+         * itself a choice that should be made deliberately, not as a side
+         * effect of a bug fix). The trade-off: a composed emoji built from
+         * several code points joined by ZWJ (e.g. a family or flag emoji) still
+         * counts as multiple units under this scheme, same as before. Code
+         * points is a defensible middle ground, not the final answer -- the
+         * product owner still needs to pick code points vs. grapheme clusters
+         * explicitly, per docs/product-decisions.md.
          */
         const val MAX_DISPLAY_NAME_LENGTH: Int = 50
 
