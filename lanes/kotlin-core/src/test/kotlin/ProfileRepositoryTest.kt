@@ -296,6 +296,66 @@ class ProfileRepositoryTest {
     }
 
     @Test
+    fun `replacing an existing photo with a new valid photo persists the new photo`() {
+        // AC-PROF-019-01: saving a new valid photo for an id that already has a
+        // profile overwrites the whole record, so the new photo (bytes +
+        // format) replaces the old one.
+        val repository = ProfileRepository()
+        val originalBytes = byteArrayOf(1, 1, 1)
+        repository.save(
+            Profile(
+                id = "user-1",
+                displayName = "Ada Lovelace",
+                photo = validPhoto(bytes = originalBytes, format = "png"),
+            ),
+        )
+
+        val newBytes = byteArrayOf(2, 2, 2, 2)
+        repository.save(
+            Profile(
+                id = "user-1",
+                displayName = "Ada Lovelace",
+                photo = validPhoto(bytes = newBytes, format = "jpeg"),
+            ),
+        )
+
+        val found = repository.find("user-1")?.photo
+        assertEquals("jpeg", found?.format)
+        assertTrue(newBytes.contentEquals(found?.bytes ?: byteArrayOf()))
+    }
+
+    @Test
+    fun `attempting to replace an existing photo with an invalid new photo leaves the original photo intact`() {
+        // AC-PROF-019-01: validation throws before the map is reassigned, so a
+        // failed replace attempt (unsupported format) leaves the previously
+        // stored photo untouched rather than corrupting or partially
+        // overwriting it.
+        val repository = ProfileRepository()
+        val originalBytes = byteArrayOf(1, 1, 1)
+        repository.save(
+            Profile(
+                id = "user-1",
+                displayName = "Ada Lovelace",
+                photo = validPhoto(bytes = originalBytes, format = "png"),
+            ),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            repository.save(
+                Profile(
+                    id = "user-1",
+                    displayName = "Ada Lovelace",
+                    photo = validPhoto(bytes = byteArrayOf(2, 2, 2, 2), format = "gif"),
+                ),
+            )
+        }
+
+        val found = repository.find("user-1")?.photo
+        assertEquals("png", found?.format)
+        assertTrue(originalBytes.contentEquals(found?.bytes ?: byteArrayOf()))
+    }
+
+    @Test
     fun `deleteAccount removes the profile including its photo`() {
         val repository = ProfileRepository()
         repository.save(
