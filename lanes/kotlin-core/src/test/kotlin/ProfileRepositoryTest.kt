@@ -305,4 +305,116 @@ class ProfileRepositoryTest {
         assertTrue(repository.deleteAccount("user-1"))
         assertNull(repository.find("user-1"))
     }
+
+    @Test
+    fun `interests and activities exactly at their limits are accepted`() {
+        // AC-PROF-021-01: a selection filled right up to each limit is valid —
+        // the boundary count is allowed, not rejected — and persists intact.
+        val repository = ProfileRepository()
+        val interests = List(ProfileRepository.MAX_INTERESTS) { "interest-$it" }
+        val activities = List(ProfileRepository.MAX_ACTIVITIES) { "activity-$it" }
+        repository.save(
+            Profile(
+                id = "user-1",
+                displayName = "Ada Lovelace",
+                photo = validPhoto(),
+                interests = interests,
+                activities = activities,
+            ),
+        )
+
+        val found = repository.find("user-1")
+        assertEquals(interests, found?.interests)
+        assertEquals(activities, found?.activities)
+    }
+
+    @Test
+    fun `interests one entry over the maximum count throws and persists nothing`() {
+        // AC-PROF-021-01: an over-limit interests list is rejected before
+        // anything is stored, and the error states the limit via MAX_INTERESTS.
+        val repository = ProfileRepository()
+        val tooMany = List(ProfileRepository.MAX_INTERESTS + 1) { "interest-$it" }
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            repository.save(
+                Profile(
+                    id = "user-1",
+                    displayName = "Ada Lovelace",
+                    photo = validPhoto(),
+                    interests = tooMany,
+                ),
+            )
+        }
+        assertTrue(error.message?.contains(ProfileRepository.MAX_INTERESTS.toString()) == true)
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
+    fun `activities one entry over the maximum count throws and persists nothing`() {
+        // AC-PROF-021-01: an over-limit activities list is rejected before
+        // anything is stored, and the error states the limit via MAX_ACTIVITIES.
+        val repository = ProfileRepository()
+        val tooMany = List(ProfileRepository.MAX_ACTIVITIES + 1) { "activity-$it" }
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            repository.save(
+                Profile(
+                    id = "user-1",
+                    displayName = "Ada Lovelace",
+                    photo = validPhoto(),
+                    activities = tooMany,
+                ),
+            )
+        }
+        assertTrue(error.message?.contains(ProfileRepository.MAX_ACTIVITIES.toString()) == true)
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
+    fun `an at-limit interests list is accepted alongside an over-limit activities list being rejected`() {
+        // AC-PROF-021-01: the two limits are enforced independently. A list at
+        // the interests limit does not excuse an over-limit activities list, and
+        // the activities failure is what rejects the save — nothing is stored.
+        val repository = ProfileRepository()
+        val interestsAtLimit = List(ProfileRepository.MAX_INTERESTS) { "interest-$it" }
+        val activitiesOverLimit = List(ProfileRepository.MAX_ACTIVITIES + 1) { "activity-$it" }
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            repository.save(
+                Profile(
+                    id = "user-1",
+                    displayName = "Ada Lovelace",
+                    photo = validPhoto(),
+                    interests = interestsAtLimit,
+                    activities = activitiesOverLimit,
+                ),
+            )
+        }
+        assertTrue(error.message?.contains(ProfileRepository.MAX_ACTIVITIES.toString()) == true)
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
+    fun `an at-limit activities list is accepted alongside an over-limit interests list being rejected`() {
+        // AC-PROF-021-01: the mirror case — a list at the activities limit does
+        // not excuse an over-limit interests list, confirming each count is
+        // checked on its own field and nothing is stored.
+        val repository = ProfileRepository()
+        val interestsOverLimit = List(ProfileRepository.MAX_INTERESTS + 1) { "interest-$it" }
+        val activitiesAtLimit = List(ProfileRepository.MAX_ACTIVITIES) { "activity-$it" }
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            repository.save(
+                Profile(
+                    id = "user-1",
+                    displayName = "Ada Lovelace",
+                    photo = validPhoto(),
+                    interests = interestsOverLimit,
+                    activities = activitiesAtLimit,
+                ),
+            )
+        }
+        assertTrue(error.message?.contains(ProfileRepository.MAX_INTERESTS.toString()) == true)
+        assertNull(repository.find("user-1"))
+    }
 }
