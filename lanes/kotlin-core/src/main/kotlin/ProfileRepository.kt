@@ -35,10 +35,12 @@ class ProfileRepository {
      * rejected if it is longer than [MAX_BIOGRAPHY_LENGTH], measured after
      * trimming.
      *
-     * The photo format is normalized (trimmed and lowercased) and rejected
-     * unless it names one of [SUPPORTED_PHOTO_FORMATS]; the photo bytes are
-     * rejected if larger than [MAX_PHOTO_SIZE_BYTES]. Both checks throw before
-     * anything is stored.
+     * The photo is optional. When present, its format is normalized (trimmed
+     * and lowercased) and rejected unless it names one of
+     * [SUPPORTED_PHOTO_FORMATS], and its bytes are rejected if larger than
+     * [MAX_PHOTO_SIZE_BYTES]; both checks throw before anything is stored. When
+     * absent (null), the photo is stored as null and the profile is simply not
+     * yet complete (see [Profile.isComplete]).
      */
     fun save(profile: Profile) {
         // The id is not covered by any product decision (issue #36, item 1):
@@ -76,22 +78,32 @@ class ProfileRepository {
         require(trimmedBiography.length <= MAX_BIOGRAPHY_LENGTH) {
             "biography must be at most $MAX_BIOGRAPHY_LENGTH characters"
         }
-        val normalizedPhotoFormat = profile.photo.format.trim().lowercase()
-        require(normalizedPhotoFormat in SUPPORTED_PHOTO_FORMATS) {
-            "photo format must be one of ${SUPPORTED_PHOTO_FORMATS.joinToString(", ")}"
-        }
-        require(profile.photo.bytes.size <= MAX_PHOTO_SIZE_BYTES) {
-            "photo must be at most $MAX_PHOTO_SIZE_BYTES bytes"
+        // The photo is optional: a profile with no photo is stored as-is (its
+        // photo left null) and is simply not yet complete (see [Profile.isComplete]).
+        // A person can reach this state either by saving a profile without a
+        // photo or by calling [removePhoto]. The format/size validation only
+        // makes sense for an actual photo, so it is guarded behind a null check
+        // rather than dereferencing a possibly-null photo.
+        val validatedPhoto = profile.photo?.let { photo ->
+            val normalizedPhotoFormat = photo.format.trim().lowercase()
+            require(normalizedPhotoFormat in SUPPORTED_PHOTO_FORMATS) {
+                "photo format must be one of ${SUPPORTED_PHOTO_FORMATS.joinToString(", ")}"
+            }
+            require(photo.bytes.size <= MAX_PHOTO_SIZE_BYTES) {
+                "photo must be at most $MAX_PHOTO_SIZE_BYTES bytes"
+            }
+            photo.copy(format = normalizedPhotoFormat)
         }
         // Store what was validated. Storing `profile` unchanged here meant the
         // check and the record disagreed: "  Ada  " was measured as 3
         // characters and kept as 7, and a name padded to the limit persisted
         // over it. The same rule applies to the biography and to the photo
-        // format, which is kept in its normalized form.
+        // format, which is kept in its normalized form (or left null when there
+        // is no photo).
         profiles[profile.id] = profile.copy(
             displayName = trimmed,
             biography = trimmedBiography,
-            photo = profile.photo.copy(format = normalizedPhotoFormat),
+            photo = validatedPhoto,
         )
     }
 
@@ -103,6 +115,36 @@ class ProfileRepository {
      * Returns false (rather than throwing) when the id was never stored.
      */
     fun deleteAccount(id: String): Boolean = profiles.remove(id) != null
+
+    /**
+     * Clears the photo on the profile for [id], leaving the rest of the record
+     * intact, and returns true if a profile existed to update. Returns false
+     * (rather than throwing) when the id was never stored — mirroring
+     * [deleteAccount]'s "false only for an unknown id" semantics.
+     *
+     * This is the data-layer half of AC-PROF-019-02 ("remove an existing photo
+     * without uploading a replacement"). Per docs/product-decisions.md a photo
+     * is mandatory for a profile to be *complete*, not to *exist*, so clearing
+     * it flips [Profile.isComplete] from true to false rather than being
+     * rejected. The AC's "shows a default placeholder" is a presentation concern
+     * with no UI layer in this codebase yet: storing null and letting a future
+     * UI render the placeholder is the defensible split, flagged here rather
+     * than silently assumed.
+     *
+     * Removing a photo on a profile that already has none is a valid no-op: the
+     * id exists, so it returns true, and the record is written back unchanged.
+     *
+     * Retention/handling of the cleared photo bytes is out of scope (still an
+     * open item in docs/product-decisions.md). Like the biography, the photo is
+     * part of the same [Profile] record, so overwriting it with null is the only
+     * cleanup needed here — there is no separate copy and no background
+     * retention (same reasoning as [deleteAccount]).
+     */
+    fun removePhoto(id: String): Boolean {
+        val profile = profiles[id] ?: return false
+        profiles[id] = profile.copy(photo = null)
+        return true
+    }
 
     companion object {
         /**

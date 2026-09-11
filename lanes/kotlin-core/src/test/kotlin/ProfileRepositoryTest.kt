@@ -305,4 +305,74 @@ class ProfileRepositoryTest {
         assertTrue(repository.deleteAccount("user-1"))
         assertNull(repository.find("user-1"))
     }
+
+    @Test
+    fun `a freshly saved profile with a photo is complete`() {
+        // Sanity check for the isComplete flip the removal tests rely on.
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertTrue(repository.find("user-1")?.isComplete == true)
+    }
+
+    @Test
+    fun `removePhoto clears the photo on an existing profile`() {
+        // AC-PROF-019-02: removing an existing photo without uploading a
+        // replacement clears it (a future UI renders the default placeholder).
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertTrue(repository.removePhoto("user-1"))
+        assertNull(repository.find("user-1")?.photo)
+    }
+
+    @Test
+    fun `removePhoto leaves the rest of the profile intact`() {
+        val repository = ProfileRepository()
+        repository.save(
+            Profile(
+                id = "user-1",
+                displayName = "Ada Lovelace",
+                photo = validPhoto(),
+                biography = "Mathematician and first programmer.",
+            ),
+        )
+
+        assertTrue(repository.removePhoto("user-1"))
+        val found = repository.find("user-1")
+        assertEquals("Ada Lovelace", found?.displayName)
+        assertEquals("Mathematician and first programmer.", found?.biography)
+    }
+
+    @Test
+    fun `removePhoto makes a complete profile incomplete`() {
+        // AC-PROF-019-02: a photo is mandatory for completeness, so clearing it
+        // flips isComplete from true to false rather than being silently
+        // ignored.
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertTrue(repository.removePhoto("user-1"))
+        assertFalse(repository.find("user-1")?.isComplete == true)
+    }
+
+    @Test
+    fun `removePhoto on an unknown id returns false without throwing`() {
+        // Mirrors deleteAccount: false only for an id that was never stored.
+        val repository = ProfileRepository()
+
+        assertFalse(repository.removePhoto("never-saved"))
+    }
+
+    @Test
+    fun `removePhoto on a profile that already has no photo returns true`() {
+        // The id exists and the photo is already null, so removal is a valid
+        // no-op: it returns true and leaves the record unchanged.
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        assertTrue(repository.removePhoto("user-1"))
+
+        assertTrue(repository.removePhoto("user-1"))
+        assertNull(repository.find("user-1")?.photo)
+    }
 }
