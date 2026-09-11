@@ -1,4 +1,24 @@
 /**
+ * The confirmation that a [Profile] was saved successfully, returned by
+ * [ProfileRepository.save].
+ *
+ * Implementation choice, flagged because docs/product-decisions.md is silent on
+ * how a save confirmation should be represented in code (issue #31,
+ * AC-PROF-020-01). The acceptance criterion asks that, once a save completes,
+ * "the system shows a clear success confirmation (e.g. a message or visual
+ * state change)". This lane has no UI layer, so [ProfileRepository] is the only
+ * place "the system" can represent save completion: the closest analogue to
+ * showing a confirmation is returning one from [ProfileRepository.save]. A
+ * small value object carrying the saved [profileId] and a human-readable
+ * [message] is the minimal, source-compatible shape (a validation failure still
+ * throws before any confirmation is constructed, so a confirmation only ever
+ * exists for a save that actually completed). This is a defensible default, not
+ * a re-litigated product decision -- the eventual UI/transport shape of the
+ * confirmation is still an open product/eng question.
+ */
+data class ProfileSaveConfirmation(val profileId: String, val message: String)
+
+/**
  * In-process storage for [Profile] records.
  *
  * Data ownership, per constitution P1: the only personal data kept here is the
@@ -39,8 +59,13 @@ class ProfileRepository {
      * unless it names one of [SUPPORTED_PHOTO_FORMATS]; the photo bytes are
      * rejected if larger than [MAX_PHOTO_SIZE_BYTES]. Both checks throw before
      * anything is stored.
+     *
+     * On success, returns a [ProfileSaveConfirmation] for the saved profile
+     * (see [ProfileSaveConfirmation] for why the confirmation is a return
+     * value). A validation failure throws before storage, so no confirmation
+     * is produced for a save that does not complete.
      */
-    fun save(profile: Profile) {
+    fun save(profile: Profile): ProfileSaveConfirmation {
         // The id is not covered by any product decision (issue #36, item 1):
         // nothing in the plan or in docs/product-decisions.md says whether the
         // domain layer validates it or trusts it as an already-authenticated
@@ -93,6 +118,7 @@ class ProfileRepository {
             biography = trimmedBiography,
             photo = profile.photo.copy(format = normalizedPhotoFormat),
         )
+        return ProfileSaveConfirmation(profile.id, SAVE_SUCCESS_MESSAGE)
     }
 
     /** Returns the stored [Profile] for [id], or null if none exists. */
@@ -105,6 +131,15 @@ class ProfileRepository {
     fun deleteAccount(id: String): Boolean = profiles.remove(id) != null
 
     companion object {
+        /**
+         * Human-readable message reported in a [ProfileSaveConfirmation] when a
+         * profile is saved successfully. Kept as a single named constant so the
+         * confirmation text lives in exactly one place; see
+         * [ProfileSaveConfirmation] for why the confirmation is represented as
+         * a return value at all.
+         */
+        const val SAVE_SUCCESS_MESSAGE: String = "Profile saved successfully"
+
         /**
          * Maximum allowed display-name length, measured after trimming, in
          * Unicode code points (see below).
