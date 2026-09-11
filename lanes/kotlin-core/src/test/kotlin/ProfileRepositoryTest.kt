@@ -305,4 +305,39 @@ class ProfileRepositoryTest {
         assertTrue(repository.deleteAccount("user-1"))
         assertNull(repository.find("user-1"))
     }
+
+    @Test
+    fun `editing an existing profile persists the change and is reflected on find`() {
+        // AC-PROF-014-01: saving an edit to an existing profile (same id,
+        // changed field) overwrites the stored value, and a later find()
+        // returns the edited profile.
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(
+            Profile(
+                id = "user-1",
+                displayName = "Ada King",
+                photo = validPhoto(),
+                biography = "Countess of Lovelace.",
+            ),
+        )
+
+        val found = repository.find("user-1")
+        assertEquals("Ada King", found?.displayName)
+        assertEquals("Countess of Lovelace.", found?.biography)
+    }
+
+    @Test
+    fun `an invalid edit throws and leaves the previously saved value intact`() {
+        // AC-PROF-014-01: an invalid edit (blank displayName) to an existing
+        // profile is rejected before anything is stored, so find() still
+        // returns the previously saved value.
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertFailsWith<IllegalArgumentException> {
+            repository.save(Profile(id = "user-1", displayName = "   ", photo = validPhoto()))
+        }
+        assertEquals("Ada Lovelace", repository.find("user-1")?.displayName)
+    }
 }
