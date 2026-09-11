@@ -39,6 +39,15 @@ class ProfileRepository {
      * unless it names one of [SUPPORTED_PHOTO_FORMATS]; the photo bytes are
      * rejected if larger than [MAX_PHOTO_SIZE_BYTES]. Both checks throw before
      * anything is stored.
+     *
+     * Confirmation of success (AC-PROF-013-01): at this repository layer,
+     * "the profile was saved successfully" is signalled by a normal,
+     * non-throwing return from this method — if any validation `require`
+     * above fails the call throws and nothing is stored, so a clean return is
+     * the success confirmation callers can rely on. The richer, user-facing
+     * confirmation experience (e.g. a visible acknowledgement in the UI) is a
+     * separate concern deliberately scoped out of this layer and tracked under
+     * AC-PROF-020-01 (issue #31). No behaviour change is implied by this note.
      */
     fun save(profile: Profile) {
         // The id is not covered by any product decision (issue #36, item 1):
