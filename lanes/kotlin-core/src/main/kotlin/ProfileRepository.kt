@@ -39,6 +39,14 @@ class ProfileRepository {
      * unless it names one of [SUPPORTED_PHOTO_FORMATS]; the photo bytes are
      * rejected if larger than [MAX_PHOTO_SIZE_BYTES]. Both checks throw before
      * anything is stored.
+     *
+     * AC-PROF-019-01 (issue #29 — replace existing profile photo on upload):
+     * this criterion needs no dedicated logic. The update semantics above mean
+     * saving a valid [Profile] for an id that already has a record overwrites
+     * that record whole, so the new photo replaces the old one. Because every
+     * validation check throws *before* the map is reassigned, an invalid
+     * replacement photo leaves the previously stored photo untouched rather
+     * than partially overwriting it.
      */
     fun save(profile: Profile) {
         // The id is not covered by any product decision (issue #36, item 1):
