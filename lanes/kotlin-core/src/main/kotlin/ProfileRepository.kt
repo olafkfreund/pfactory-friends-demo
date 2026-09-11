@@ -48,6 +48,14 @@ class ProfileRepository {
      * confirmation experience (e.g. a visible acknowledgement in the UI) is a
      * separate concern deliberately scoped out of this layer and tracked under
      * AC-PROF-020-01 (issue #31). No behaviour change is implied by this note.
+     *
+     * AC-PROF-019-01 (issue #29 — replace existing profile photo on upload):
+     * this criterion needs no dedicated logic. The update semantics above mean
+     * saving a valid [Profile] for an id that already has a record overwrites
+     * that record whole, so the new photo replaces the old one. Because every
+     * validation check throws *before* the map is reassigned, an invalid
+     * replacement photo leaves the previously stored photo untouched rather
+     * than partially overwriting it.
      */
     fun save(profile: Profile) {
         // The id is not covered by any product decision (issue #36, item 1):
