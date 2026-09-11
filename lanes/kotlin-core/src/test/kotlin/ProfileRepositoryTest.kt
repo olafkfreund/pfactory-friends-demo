@@ -305,4 +305,41 @@ class ProfileRepositoryTest {
         assertTrue(repository.deleteAccount("user-1"))
         assertNull(repository.find("user-1"))
     }
+
+    @Test
+    fun `an invalid display name and photo together are reported in one exception naming both fields, persisting nothing`() {
+        // AC-PROF-011-01 (issue #23): when more than one mandatory field is
+        // invalid at once, save() evaluates all of them and fails with a single
+        // ProfileValidationException naming every affected field, rather than
+        // short-circuiting on the first. Here the display name is blank and the
+        // photo format is unsupported simultaneously.
+        val repository = ProfileRepository()
+
+        val error = assertFailsWith<ProfileValidationException> {
+            repository.save(
+                Profile(id = "user-1", displayName = "   ", photo = validPhoto(format = "gif")),
+            )
+        }
+
+        assertTrue(error.invalidFields.contains(ProfileValidationException.FIELD_DISPLAY_NAME))
+        assertTrue(error.invalidFields.contains(ProfileValidationException.FIELD_PHOTO))
+        assertTrue(error.message?.contains(ProfileValidationException.FIELD_DISPLAY_NAME) == true)
+        assertTrue(error.message?.contains(ProfileValidationException.FIELD_PHOTO) == true)
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
+    fun `a profile with every mandatory field valid saves successfully`() {
+        // AC-PROF-011-01 (issue #23), positive case: when both mandatory fields
+        // (display name and photo) are valid, save() stores the profile and a
+        // later find() reads it back.
+        val repository = ProfileRepository()
+        repository.save(
+            Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()),
+        )
+
+        val found = repository.find("user-1")
+        assertEquals("Ada Lovelace", found?.displayName)
+        assertEquals("png", found?.photo?.format)
+    }
 }
