@@ -296,6 +296,37 @@ class ProfileRepositoryTest {
     }
 
     @Test
+    fun `saving a valid profile returns a confirmation carrying its id and the success message`() {
+        // AC-PROF-020-01: once a save completes, the system reports a clear
+        // success confirmation. This lane has no UI, so save() returns a
+        // ProfileSaveConfirmation naming the saved id and the shared
+        // SAVE_SUCCESS_MESSAGE (see ProfileSaveConfirmation for why).
+        val repository = ProfileRepository()
+
+        val confirmation =
+            repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertEquals("user-1", confirmation.profileId)
+        assertEquals(ProfileRepository.SAVE_SUCCESS_MESSAGE, confirmation.message)
+    }
+
+    @Test
+    fun `saving an invalid profile throws and produces no confirmation`() {
+        // AC-PROF-020-01: a validation failure throws before storage, so no
+        // ProfileSaveConfirmation is ever produced for a save that does not
+        // complete. A blank display name stands in for any invalid input.
+        val repository = ProfileRepository()
+
+        var confirmation: ProfileSaveConfirmation? = null
+        assertFailsWith<IllegalArgumentException> {
+            confirmation =
+                repository.save(Profile(id = "user-1", displayName = "   ", photo = validPhoto()))
+        }
+        assertNull(confirmation)
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
     fun `deleteAccount removes the profile including its photo`() {
         val repository = ProfileRepository()
         repository.save(
