@@ -35,10 +35,10 @@ class ProfileRepository {
      * rejected if it is longer than [MAX_BIOGRAPHY_LENGTH], measured after
      * trimming.
      *
-     * The photo format is normalized (trimmed and lowercased) and rejected
-     * unless it names one of [SUPPORTED_PHOTO_FORMATS]; the photo bytes are
-     * rejected if larger than [MAX_PHOTO_SIZE_BYTES]. Both checks throw before
-     * anything is stored.
+     * The photo is required: its bytes are rejected if empty. The photo format
+     * is normalized (trimmed and lowercased) and rejected unless it names one
+     * of [SUPPORTED_PHOTO_FORMATS]; the photo bytes are rejected if larger than
+     * [MAX_PHOTO_SIZE_BYTES]. All three checks throw before anything is stored.
      */
     fun save(profile: Profile) {
         // The id is not covered by any product decision (issue #36, item 1):
@@ -75,6 +75,9 @@ class ProfileRepository {
         val trimmedBiography = profile.biography.trim()
         require(trimmedBiography.length <= MAX_BIOGRAPHY_LENGTH) {
             "biography must be at most $MAX_BIOGRAPHY_LENGTH characters"
+        }
+        require(profile.photo.bytes.isNotEmpty()) {
+            "photo must not be empty"
         }
         val normalizedPhotoFormat = profile.photo.format.trim().lowercase()
         require(normalizedPhotoFormat in SUPPORTED_PHOTO_FORMATS) {

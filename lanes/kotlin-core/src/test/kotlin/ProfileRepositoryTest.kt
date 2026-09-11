@@ -246,6 +246,21 @@ class ProfileRepositoryTest {
     }
 
     @Test
+    fun `saving a photo with empty bytes throws and persists nothing`() {
+        // AC-PROF-012-01: the photo is mandatory, so an empty-byte payload is
+        // rejected before anything is stored, and the error names the photo.
+        val repository = ProfileRepository()
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            repository.save(
+                Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = byteArrayOf())),
+            )
+        }
+        assertTrue(error.message?.contains("photo") == true)
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
     fun `a photo format is stored normalized to lowercase and trimmed`() {
         // Mirrors the displayName-is-trimmed test: the format is validated after
         // normalization, so the stored value must be the normalized form too.
