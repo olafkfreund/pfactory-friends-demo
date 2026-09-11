@@ -1,4 +1,37 @@
 /**
+ * Thrown by [ProfileRepository.save] when one or more mandatory profile fields
+ * (the display name and/or the photo) are missing or invalid.
+ *
+ * Where a sequential `require()` chain stops at the first offending field, this
+ * reports every affected mandatory field at once (issue #23 / AC-PROF-011-01):
+ * [invalidFields] names each one, so a caller can highlight all of them rather
+ * than just the first encountered. [message] concatenates the individual
+ * per-field reasons and therefore still contains the substrings existing tests
+ * assert on (e.g. a supported photo format and [ProfileRepository.MAX_PHOTO_SIZE_BYTES]).
+ *
+ * Subclasses [IllegalArgumentException] so existing
+ * `assertFailsWith<IllegalArgumentException>` call sites keep passing unchanged.
+ */
+class ProfileValidationException(
+    val invalidFields: List<String>,
+    message: String,
+) : IllegalArgumentException(message) {
+    companion object {
+        // Field-name tokens for the mandatory fields. No product decision fixes
+        // the exact string format (issue #23 does not specify one), so these
+        // mirror the corresponding [Profile] property names -- a defensible,
+        // stable choice a UI layer can map back to a field without a separate
+        // lookup table.
+
+        /** Field-name token for the mandatory display name. */
+        const val FIELD_DISPLAY_NAME: String = "displayName"
+
+        /** Field-name token for the mandatory photo. */
+        const val FIELD_PHOTO: String = "photo"
+    }
+}
+
+/**
  * In-process storage for [Profile] records.
  *
  * Data ownership, per constitution P1: the only personal data kept here is the
@@ -26,19 +59,20 @@ class ProfileRepository {
      * Rejects a blank/whitespace-only id (see [save]'s implementation comment
      * for why -- this is a floor, not the full id-format decision).
      *
-     * Rejects a blank/whitespace-only display name, one containing a control
-     * character (including a newline), and one longer than
-     * [MAX_DISPLAY_NAME_LENGTH] Unicode code points, throwing before anything
-     * is stored.
+     * The mandatory fields -- the display name and the photo -- are all
+     * evaluated before failing, rather than short-circuiting on the first bad
+     * one (issue #23 / AC-PROF-011-01). A blank/whitespace-only display name,
+     * one containing a control character (including a newline), or one longer
+     * than [MAX_DISPLAY_NAME_LENGTH] Unicode code points makes the display name
+     * invalid; a photo whose normalized (trimmed, lowercased) format is not one
+     * of [SUPPORTED_PHOTO_FORMATS], or whose bytes are larger than
+     * [MAX_PHOTO_SIZE_BYTES], makes the photo invalid. If either or both are
+     * invalid a single [ProfileValidationException] is thrown, naming every
+     * affected field, before anything is stored.
      *
      * The biography is optional (a blank one is allowed) but, when present, is
      * rejected if it is longer than [MAX_BIOGRAPHY_LENGTH], measured after
      * trimming.
-     *
-     * The photo format is normalized (trimmed and lowercased) and rejected
-     * unless it names one of [SUPPORTED_PHOTO_FORMATS]; the photo bytes are
-     * rejected if larger than [MAX_PHOTO_SIZE_BYTES]. Both checks throw before
-     * anything is stored.
      */
     fun save(profile: Profile) {
         // The id is not covered by any product decision (issue #36, item 1):
@@ -53,10 +87,16 @@ class ProfileRepository {
         require(profile.id.isNotBlank()) {
             "id must not be blank"
         }
+        // Evaluate every mandatory field (display name, photo) before failing,
+        // so a caller can be told about all of them at once instead of one per
+        // rejected save (issue #23 / AC-PROF-011-01). Each field contributes at
+        // most one entry to invalidFields; the accumulated per-field reasons
+        // become the exception message (and still contain the substrings other
+        // tests assert on, e.g. a supported format and MAX_PHOTO_SIZE_BYTES).
+        val invalidFields = mutableListOf<String>()
+        val reasons = mutableListOf<String>()
+
         val trimmed = profile.displayName.trim()
-        require(trimmed.isNotEmpty()) {
-            "displayName must not be blank"
-        }
         // Control characters (including newlines and carriage returns) are
         // rejected outright. docs/product-decisions.md lists "Permitted
         // characters in a display name" as still undecided, but a newline in a
@@ -66,23 +106,48 @@ class ProfileRepository {
         // minimal, defensible floor -- it does not attempt the fuller policy
         // the issue also flags (e.g. bidi override characters), which needs a
         // product decision on the complete permitted-character set.
-        require(trimmed.none { it.isISOControl() }) {
-            "displayName must not contain control characters"
+        val displayNameReason = when {
+            trimmed.isEmpty() ->
+                "displayName must not be blank"
+            trimmed.any { it.isISOControl() } ->
+                "displayName must not contain control characters"
+            trimmed.codePointCount(0, trimmed.length) > MAX_DISPLAY_NAME_LENGTH ->
+                "displayName must be at most $MAX_DISPLAY_NAME_LENGTH characters"
+            else -> null
         }
-        require(trimmed.codePointCount(0, trimmed.length) <= MAX_DISPLAY_NAME_LENGTH) {
-            "displayName must be at most $MAX_DISPLAY_NAME_LENGTH characters"
+        if (displayNameReason != null) {
+            invalidFields += ProfileValidationException.FIELD_DISPLAY_NAME
+            reasons += displayNameReason
         }
+
+        val normalizedPhotoFormat = profile.photo.format.trim().lowercase()
+        val photoReason = when {
+            normalizedPhotoFormat !in SUPPORTED_PHOTO_FORMATS ->
+                "photo format must be one of ${SUPPORTED_PHOTO_FORMATS.joinToString(", ")}"
+            profile.photo.bytes.size > MAX_PHOTO_SIZE_BYTES ->
+                "photo must be at most $MAX_PHOTO_SIZE_BYTES bytes"
+            else -> null
+        }
+        if (photoReason != null) {
+            invalidFields += ProfileValidationException.FIELD_PHOTO
+            reasons += photoReason
+        }
+
+        if (invalidFields.isNotEmpty()) {
+            throw ProfileValidationException(
+                invalidFields = invalidFields.toList(),
+                message = reasons.joinToString("; "),
+            )
+        }
+
+        // The biography is optional, so it is not a mandatory field for the
+        // collect-every-invalid-field rule above; its length check stays a
+        // plain require() as before (AC-PROF-003-02).
         val trimmedBiography = profile.biography.trim()
         require(trimmedBiography.length <= MAX_BIOGRAPHY_LENGTH) {
             "biography must be at most $MAX_BIOGRAPHY_LENGTH characters"
         }
-        val normalizedPhotoFormat = profile.photo.format.trim().lowercase()
-        require(normalizedPhotoFormat in SUPPORTED_PHOTO_FORMATS) {
-            "photo format must be one of ${SUPPORTED_PHOTO_FORMATS.joinToString(", ")}"
-        }
-        require(profile.photo.bytes.size <= MAX_PHOTO_SIZE_BYTES) {
-            "photo must be at most $MAX_PHOTO_SIZE_BYTES bytes"
-        }
+
         // Store what was validated. Storing `profile` unchanged here meant the
         // check and the record disagreed: "  Ada  " was measured as 3
         // characters and kept as 7, and a name padded to the limit persisted
