@@ -35,10 +35,12 @@ class ProfileRepository {
      * rejected if it is longer than [MAX_BIOGRAPHY_LENGTH], measured after
      * trimming.
      *
-     * The photo format is normalized (trimmed and lowercased) and rejected
-     * unless it names one of [SUPPORTED_PHOTO_FORMATS]; the photo bytes are
-     * rejected if larger than [MAX_PHOTO_SIZE_BYTES]. Both checks throw before
-     * anything is stored.
+     * The photo is optional (a profile can be saved without one, in which case
+     * it is stored as null and the profile is incomplete — see
+     * [Profile.isComplete]). When a photo is present, its format is normalized
+     * (trimmed and lowercased) and rejected unless it names one of
+     * [SUPPORTED_PHOTO_FORMATS]; the photo bytes are rejected if larger than
+     * [MAX_PHOTO_SIZE_BYTES]. Both checks throw before anything is stored.
      *
      * Confirmation of success (AC-PROF-013-01): at this repository layer,
      * "the profile was saved successfully" is signalled by a normal,
@@ -97,12 +99,21 @@ class ProfileRepository {
         require(trimmedBiography.length <= MAX_BIOGRAPHY_LENGTH) {
             "biography must be at most $MAX_BIOGRAPHY_LENGTH characters"
         }
-        val normalizedPhotoFormat = profile.photo.format.trim().lowercase()
-        require(normalizedPhotoFormat in SUPPORTED_PHOTO_FORMATS) {
-            "photo format must be one of ${SUPPORTED_PHOTO_FORMATS.joinToString(", ")}"
-        }
-        require(profile.photo.bytes.size <= MAX_PHOTO_SIZE_BYTES) {
-            "photo must be at most $MAX_PHOTO_SIZE_BYTES bytes"
+        // The photo is optional: only validate and normalize a format/size when
+        // one is present. An absent photo is stored as null, leaving the profile
+        // incomplete rather than being rejected.
+        val photo = profile.photo
+        val normalizedPhoto = if (photo != null) {
+            val normalizedPhotoFormat = photo.format.trim().lowercase()
+            require(normalizedPhotoFormat in SUPPORTED_PHOTO_FORMATS) {
+                "photo format must be one of ${SUPPORTED_PHOTO_FORMATS.joinToString(", ")}"
+            }
+            require(photo.bytes.size <= MAX_PHOTO_SIZE_BYTES) {
+                "photo must be at most $MAX_PHOTO_SIZE_BYTES bytes"
+            }
+            photo.copy(format = normalizedPhotoFormat)
+        } else {
+            null
         }
         require(profile.interests.size <= MAX_INTERESTS) {
             "interests must be at most $MAX_INTERESTS entries"
@@ -118,7 +129,7 @@ class ProfileRepository {
         profiles[profile.id] = profile.copy(
             displayName = trimmed,
             biography = trimmedBiography,
-            photo = profile.photo.copy(format = normalizedPhotoFormat),
+            photo = normalizedPhoto,
         )
     }
 
@@ -130,6 +141,19 @@ class ProfileRepository {
      * Returns false (rather than throwing) when the id was never stored.
      */
     fun deleteAccount(id: String): Boolean = profiles.remove(id) != null
+
+    /**
+     * Removes the photo from the stored profile for [id] without replacing it,
+     * returning true if a profile was found and updated. The profile is kept;
+     * only its photo is cleared, which leaves the profile incomplete (see
+     * [Profile.isComplete]). Returns false (rather than throwing) when the id was
+     * never stored, mirroring [deleteAccount].
+     */
+    fun removePhoto(id: String): Boolean {
+        val profile = profiles[id] ?: return false
+        profiles[id] = profile.copy(photo = null)
+        return true
+    }
 
     companion object {
         /**
