@@ -305,4 +305,37 @@ class ProfileRepositoryTest {
         assertTrue(repository.deleteAccount("user-1"))
         assertNull(repository.find("user-1"))
     }
+
+    @Test
+    fun `AC-PROF-013-01 saving a profile with all mandatory fields valid succeeds and reads back the same data`() {
+        // AC-PROF-013-01: with both mandatory fields valid (displayName and
+        // photo), save() returns normally — the repository-layer signal that
+        // the profile was saved — and an independent find() reads back the
+        // same data.
+        val repository = ProfileRepository()
+        val bytes = byteArrayOf(4, 3, 2, 1)
+        repository.save(
+            Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = bytes, format = "png")),
+        )
+
+        val found = repository.find("user-1")
+        assertEquals("Ada Lovelace", found?.displayName)
+        assertEquals("png", found?.photo?.format)
+        assertTrue(bytes.contentEquals(found?.photo?.bytes ?: byteArrayOf()))
+    }
+
+    @Test
+    fun `AC-PROF-013-01 saving a profile with an invalid mandatory field throws and find returns null`() {
+        // AC-PROF-013-01 (negative): a mandatory field that fails validation —
+        // here the mandatory photo carries an unsupported format — makes save()
+        // throw before anything is stored, so a later find() returns null.
+        val repository = ProfileRepository()
+
+        assertFailsWith<IllegalArgumentException> {
+            repository.save(
+                Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(format = "gif")),
+            )
+        }
+        assertNull(repository.find("user-1"))
+    }
 }
