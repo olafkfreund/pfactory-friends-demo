@@ -16,9 +16,50 @@ extension MatchScoreTests {
     ]
 }
 
-// AC#2: open-to-friends toggle
+// Profile model parity (Swift ↔ Kotlin, constitution P9) + AC#2
 extension ProfileRepositoryTests {
     static let __allTests = [
+        // Basic save / find
+        ("testSavingAValidDisplayNamePersistsItForAnIndependentReadBack", testSavingAValidDisplayNamePersistsItForAnIndependentReadBack),
+        // id validation
+        ("testSavingABlankIdThrowsAndPersistsNothing", testSavingABlankIdThrowsAndPersistsNothing),
+        ("testSavingAWhitespaceOnlyIdThrowsAndPersistsNothing", testSavingAWhitespaceOnlyIdThrowsAndPersistsNothing),
+        // displayName validation
+        ("testSavingABlankDisplayNameThrowsAndPersistsNothing", testSavingABlankDisplayNameThrowsAndPersistsNothing),
+        ("testADisplayNameExactlyAtTheMaximumLengthIsAccepted", testADisplayNameExactlyAtTheMaximumLengthIsAccepted),
+        ("testADisplayNameOneCharacterOverTheMaximumLengthThrowsAndPersistsNothing", testADisplayNameOneCharacterOverTheMaximumLengthThrowsAndPersistsNothing),
+        ("testADisplayNameContainingANewlineThrowsAndPersistsNothing", testADisplayNameContainingANewlineThrowsAndPersistsNothing),
+        ("testADisplayNameContainingACarriageReturnThrowsAndPersistsNothing", testADisplayNameContainingACarriageReturnThrowsAndPersistsNothing),
+        ("testADisplayNameIsStoredWithoutItsSurroundingWhitespace", testADisplayNameIsStoredWithoutItsSurroundingWhitespace),
+        ("testADisplayNameOf50SimpleEmojiAtTheMaximumLengthIsAccepted", testADisplayNameOf50SimpleEmojiAtTheMaximumLengthIsAccepted),
+        ("testADisplayNameOf51SimpleEmojiOverTheMaximumLengthThrows", testADisplayNameOf51SimpleEmojiOverTheMaximumLengthThrows),
+        // Update semantics
+        ("testSavingTwiceForTheSameIdOverwritesRatherThanDuplicating", testSavingTwiceForTheSameIdOverwritesRatherThanDuplicating),
+        // deleteAccount
+        ("testDeleteAccountRemovesTheStoredProfileSoALaterFindReturnsNil", testDeleteAccountRemovesTheStoredProfileSoALaterFindReturnsNil),
+        ("testDeleteAccountOnAnUnknownIdReturnsFalseWithoutThrowing", testDeleteAccountOnAnUnknownIdReturnsFalseWithoutThrowing),
+        // biography validation
+        ("testSavingABiographyWithinTheLimitPersistsTheTrimmedValue", testSavingABiographyWithinTheLimitPersistsTheTrimmedValue),
+        ("testABiographyOneCharacterOverTheMaximumLengthThrowsAndPersistsNothing", testABiographyOneCharacterOverTheMaximumLengthThrowsAndPersistsNothing),
+        // photo validation
+        ("testSavingAValidPhotoPeristsItForAnIndependentReadBack", testSavingAValidPhotoPeristsItForAnIndependentReadBack),
+        ("testAPhotoFormatIsStoredNormalisedToLowercaseAndTrimmed", testAPhotoFormatIsStoredNormalisedToLowercaseAndTrimmed),
+        ("testSavingAPhotoWithAnUnsupportedFormatThrowsAndPersistsNothing", testSavingAPhotoWithAnUnsupportedFormatThrowsAndPersistsNothing),
+        ("testSavingAPhotoLargerThanTheMaximumSizeThrowsAndPersistsNothing", testSavingAPhotoLargerThanTheMaximumSizeThrowsAndPersistsNothing),
+        ("testAPhotoExactlyAtTheMaximumSizeIsAccepted", testAPhotoExactlyAtTheMaximumSizeIsAccepted),
+        ("testReplacingAnExistingPhotoWithANewValidPhotoPerisistsTheNewPhoto", testReplacingAnExistingPhotoWithANewValidPhotoPerisistsTheNewPhoto),
+        ("testAttemptingToReplaceAnExistingPhotoWithAnInvalidNewPhotoLeavesTheOriginalPhotoIntact", testAttemptingToReplaceAnExistingPhotoWithAnInvalidNewPhotoLeavesTheOriginalPhotoIntact),
+        // interests / activities
+        ("testInterestsAndActivitiesExactlyAtTheirLimitsAreAccepted", testInterestsAndActivitiesExactlyAtTheirLimitsAreAccepted),
+        ("testInterestsOneEntryOverTheMaximumCountThrowsAndPersistsNothing", testInterestsOneEntryOverTheMaximumCountThrowsAndPersistsNothing),
+        ("testActivitiesOneEntryOverTheMaximumCountThrowsAndPersistsNothing", testActivitiesOneEntryOverTheMaximumCountThrowsAndPersistsNothing),
+        // isComplete
+        ("testAFreshlyCreatedProfileWithAPhotoIsComplete", testAFreshlyCreatedProfileWithAPhotoIsComplete),
+        // removePhoto
+        ("testRemovePhotoClearsThePhotoOfAnExistingProfile", testRemovePhotoClearsThePhotoOfAnExistingProfile),
+        ("testRemovePhotoLeavesTheProfileIncomplete", testRemovePhotoLeavesTheProfileIncomplete),
+        ("testRemovePhotoOnAnUnknownIdReturnsFalseWithoutThrowing", testRemovePhotoOnAnUnknownIdReturnsFalseWithoutThrowing),
+        // AC#2: open-to-friends toggle
         ("testFreshlyCreatedProfileHasOpenToFriendsFalseByDefault", testFreshlyCreatedProfileHasOpenToFriendsFalseByDefault),
         ("testSetOpenToFriendsTrueMarksProfileAsOpen", testSetOpenToFriendsTrueMarksProfileAsOpen),
         ("testSetOpenToFriendsFalseMarksProfileAsClosed", testSetOpenToFriendsFalseMarksProfileAsClosed),
