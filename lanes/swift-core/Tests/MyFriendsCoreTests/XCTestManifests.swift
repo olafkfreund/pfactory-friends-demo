@@ -8,6 +8,11 @@ extension MatchScoreTests {
     static let __allTests = [
         ("testHalfTheInterestsOverlap", testHalfTheInterestsOverlap),
         ("testEmptyInterestsScoreZeroRatherThanCrashing", testEmptyInterestsScoreZeroRatherThanCrashing),
+        // AC#1: combined score including availability
+        ("testCombinedScoreWithNoAvailabilityFallsBackToInterestScore", testCombinedScoreWithNoAvailabilityFallsBackToInterestScore),
+        ("testCombinedScoreIsMeanOfInterestAndAvailabilityScores", testCombinedScoreIsMeanOfInterestAndAvailabilityScores),
+        ("testCombinedScoreWithNoAvailabilityOverlapReducesOverallScore", testCombinedScoreWithNoAvailabilityOverlapReducesOverallScore),
+        ("testCombinedScoreWithEmptyInterestsAndAvailabilityScoresZero", testCombinedScoreWithEmptyInterestsAndAvailabilityScoresZero),
     ]
 }
 
