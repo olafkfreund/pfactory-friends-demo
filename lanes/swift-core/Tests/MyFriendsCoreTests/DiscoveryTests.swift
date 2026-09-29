@@ -482,4 +482,52 @@ final class DiscoveryTests: XCTestCase {
         XCTAssertEqual(results.count, 1)
         XCTAssertEqual(results[0].profile.id, "adult-25")
     }
+
+    func testDiscoverWithRadiusAppliesAgeBracketIsolation() {
+        // A minor searcher must not see adult candidates even when they are within
+        // the requested radius. The radius overload calls discover(searcher:) first,
+        // which applies age-bracket isolation before the distance filter, so both
+        // constraints are always in effect simultaneously (AC#1 / constitution P3,
+        // AC#3 / constitution P4).
+        //
+        // The same algorithm and test exist in the Kotlin lane
+        // (DiscoveryTest.`discover with radius applies age-bracket isolation`),
+        // per constitution P9.
+        let repository = ProfileRepository()
+        let searcher = Profile(
+            id: "minor-searcher",
+            displayName: "Minor Searcher",
+            photo: validPhoto(),
+            age: 17
+        )
+        // An adult candidate nearby: inside the radius but wrong age bracket.
+        try! repository.save(Profile(
+            id: "adult-nearby",
+            displayName: "Adult Nearby",
+            photo: validPhoto(),
+            openToFriends: true,
+            location: locationAt(deltaLat: 0.005),  // ~0.56 km — well within 25 km
+            age: ProfileRepository.minAdultAge
+        ))
+        // A minor candidate nearby: inside the radius and the correct age bracket.
+        try! repository.save(Profile(
+            id: "minor-nearby",
+            displayName: "Minor Nearby",
+            photo: validPhoto(),
+            openToFriends: true,
+            location: locationAt(deltaLat: 0.005),  // ~0.56 km — well within 25 km
+            age: 16
+        ))
+
+        let results = repository.discover(
+            searcher: searcher,
+            near: baseLocation,
+            within: .twentyFive
+        )
+
+        // Only the fellow minor should appear; the adult is excluded by
+        // age-bracket isolation even though they are within the radius.
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results[0].profile.id, "minor-nearby")
+    }
 }

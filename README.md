@@ -34,8 +34,8 @@ mentioning any of that is not being helpful. It is being dangerous.
 | `.factory/constitution.md` | The customer's own engineering policy. PFactory reads this and turns the clauses marked enforceable into hard gates. |
 | `docs/plan/` | The plan PFactory emitted, and every review finding with its citation. |
 | `docs/audit/` | The governance record: source document, findings, human approval, signed task contract, verification verdict. |
-| `lanes/swift-core/` | A Swift package with 170 tests covering all twelve acceptance criteria. Proof that the Swift verification lane actually executes. |
-| `lanes/kotlin-core/` | A Kotlin module with 170 tests covering all twelve acceptance criteria. Proof that the Kotlin verification lane actually executes. |
+| `lanes/swift-core/` | A Swift package with 171 tests covering all twelve acceptance criteria. Proof that the Swift verification lane actually executes. |
+| `lanes/kotlin-core/` | A Kotlin module with 171 tests covering all twelve acceptance criteria. Proof that the Kotlin verification lane actually executes. |
 
 ## The brief is deliberately incomplete
 
@@ -75,14 +75,14 @@ the way to the test suite instead of stopping at a document.
 MyFriends is native Swift and native Kotlin, and this fleet runs on Linux.
 
 **Kotlin verifies.** Android builds are Linux-native, and the lane runs here for
-real: `gradle test` on `lanes/kotlin-core` reports `tests=170 failures=0 errors=0`
+real: `gradle test` on `lanes/kotlin-core` reports `tests=171 failures=0 errors=0`
 in its JUnit XML. Not "BUILD SUCCESSFUL" — the actual count, because a Gradle
 build that collects zero tests prints the same success line. The CI workflow
 asserts the executed count equals the number of `@Test` methods in source so
 that a test silently not running shows up as a mismatch rather than a pass.
 
 **Swift verifies too, for library code.** `swift test` on `lanes/swift-core`
-reports `Executed 170 tests, with 0 failures`. Getting there took four wrong
+reports `Executed 171 tests, with 0 failures`. Getting there took four wrong
 answers, the last of which was concluding the lane was impossible — nixpkgs ships
 no `libIndexStore.so`, so SwiftPM's automatic test discovery is broken, but the
 pre-5.4 `LinuxMain.swift` convention still works.
