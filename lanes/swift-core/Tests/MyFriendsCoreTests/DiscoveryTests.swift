@@ -244,4 +244,140 @@ final class DiscoveryTests: XCTestCase {
         XCTAssertEqual(results.count, 1)
         XCTAssertEqual(results[0].profile.id, "ada")
     }
+
+    // MARK: - AC#3: radius-based discovery
+    //
+    // Base location: lat=51.500, lon=-0.100 (central London, approx).
+    // Offsets (same longitude, haversine on latitude arc only):
+    //   +0.005° ≈  0.56 km  → inside 1 km, 5 km, 10 km, 25 km
+    //   +0.040° ≈  4.45 km  → inside 5 km, 10 km, 25 km; outside 1 km
+    //   +0.070° ≈  7.78 km  → inside 10 km, 25 km; outside 1 km, 5 km
+    //   +0.150° ≈ 16.68 km  → inside 25 km; outside 1 km, 5 km, 10 km
+    //   +0.300° ≈ 33.37 km  → outside all four radii
+
+    private var baseLocation: GeoLocation { GeoLocation(lat: 51.500, lon: -0.100) }
+
+    private func locationAt(deltaLat: Double) -> GeoLocation {
+        GeoLocation(lat: 51.500 + deltaLat, lon: -0.100)
+    }
+
+    func testDiscoverWithRadiusReturnsOnlyProfilesWithinThatRadius() {
+        // ada is ~0.56 km away, grace is ~4.45 km away.
+        // A 1 km radius should include only ada; a 5 km radius should include both.
+        let repository = ProfileRepository()
+        let searcher = Profile(id: "searcher", displayName: "Searcher", photo: validPhoto())
+        try! repository.save(Profile(
+            id: "ada",
+            displayName: "Ada Lovelace",
+            photo: validPhoto(),
+            openToFriends: true,
+            location: locationAt(deltaLat: 0.005)   // ~0.56 km
+        ))
+        try! repository.save(Profile(
+            id: "grace",
+            displayName: "Grace Hopper",
+            photo: validPhoto(),
+            openToFriends: true,
+            location: locationAt(deltaLat: 0.040)   // ~4.45 km
+        ))
+
+        let within1km = repository.discover(searcher: searcher, near: baseLocation, within: .one)
+        let within5km = repository.discover(searcher: searcher, near: baseLocation, within: .five)
+
+        XCTAssertEqual(within1km.count, 1)
+        XCTAssertEqual(within1km[0].profile.id, "ada")
+        XCTAssertEqual(within5km.count, 2)
+    }
+
+    func testDiscoverWithRadiusExcludesProfilesWithoutALocation() {
+        // A profile that has never reported its location cannot be placed within
+        // any radius and must be excluded from radius-filtered results.
+        let repository = ProfileRepository()
+        let searcher = Profile(id: "searcher", displayName: "Searcher", photo: validPhoto())
+        try! repository.save(Profile(
+            id: "no-location",
+            displayName: "No Location",
+            photo: validPhoto(),
+            openToFriends: true
+            // location deliberately omitted (defaults to nil)
+        ))
+
+        let results = repository.discover(searcher: searcher, near: baseLocation, within: .twentyFive)
+
+        XCTAssertTrue(results.isEmpty)
+    }
+
+    func testDiscoverWithRadiusStillHonoursTheOpenToFriendsGate() {
+        // A profile within the radius but with openToFriends=false must not appear.
+        let repository = ProfileRepository()
+        let searcher = Profile(id: "searcher", displayName: "Searcher", photo: validPhoto())
+        try! repository.save(Profile(
+            id: "closed",
+            displayName: "Closed Profile",
+            photo: validPhoto(),
+            openToFriends: false,                       // flag is off
+            location: locationAt(deltaLat: 0.005)       // well within any radius
+        ))
+
+        let results = repository.discover(searcher: searcher, near: baseLocation, within: .twentyFive)
+
+        XCTAssertTrue(results.isEmpty)
+    }
+
+    func testDiscoverWithRadiusResultsAreOrderedByScoreDescending() {
+        // Two profiles within the radius; higher-scoring one must come first.
+        let repository = ProfileRepository()
+        let searcher = Profile(
+            id: "searcher",
+            displayName: "Searcher",
+            photo: validPhoto(),
+            interests: ["jazz", "climbing"]
+        )
+        // grace shares both interests → score 1.0
+        try! repository.save(Profile(
+            id: "grace",
+            displayName: "Grace Hopper",
+            photo: validPhoto(),
+            interests: ["jazz", "climbing"],
+            openToFriends: true,
+            location: locationAt(deltaLat: 0.005)   // ~0.56 km
+        ))
+        // ada shares only jazz → score 0.5
+        try! repository.save(Profile(
+            id: "ada",
+            displayName: "Ada Lovelace",
+            photo: validPhoto(),
+            interests: ["jazz"],
+            openToFriends: true,
+            location: locationAt(deltaLat: 0.040)   // ~4.45 km
+        ))
+
+        let results = repository.discover(searcher: searcher, near: baseLocation, within: .ten)
+
+        XCTAssertEqual(results.count, 2)
+        XCTAssertEqual(results[0].profile.id, "grace")
+        XCTAssertEqual(results[0].score, 1.0)
+        XCTAssertEqual(results[1].profile.id, "ada")
+        XCTAssertEqual(results[1].score, 0.5)
+    }
+
+    func testDiscoverWithAllFourRadiusValuesUsesTheCorrectThresholds() {
+        // One profile per zone; each radius value should include exactly the
+        // profiles within it.
+        //   ~0.56 km → within all four radii
+        //   ~4.45 km → within 5 km, 10 km, 25 km; outside 1 km
+        //   ~7.78 km → within 10 km, 25 km; outside 1 km, 5 km
+        //  ~16.68 km → within 25 km; outside 1 km, 5 km, 10 km
+        let repository = ProfileRepository()
+        let searcher = Profile(id: "searcher", displayName: "Searcher", photo: validPhoto())
+        try! repository.save(Profile(id: "p1", displayName: "P1", photo: validPhoto(), openToFriends: true, location: locationAt(deltaLat: 0.005)))
+        try! repository.save(Profile(id: "p2", displayName: "P2", photo: validPhoto(), openToFriends: true, location: locationAt(deltaLat: 0.040)))
+        try! repository.save(Profile(id: "p3", displayName: "P3", photo: validPhoto(), openToFriends: true, location: locationAt(deltaLat: 0.070)))
+        try! repository.save(Profile(id: "p4", displayName: "P4", photo: validPhoto(), openToFriends: true, location: locationAt(deltaLat: 0.150)))
+
+        XCTAssertEqual(repository.discover(searcher: searcher, near: baseLocation, within: .one).count, 1)
+        XCTAssertEqual(repository.discover(searcher: searcher, near: baseLocation, within: .five).count, 2)
+        XCTAssertEqual(repository.discover(searcher: searcher, near: baseLocation, within: .ten).count, 3)
+        XCTAssertEqual(repository.discover(searcher: searcher, near: baseLocation, within: .twentyFive).count, 4)
+    }
 }

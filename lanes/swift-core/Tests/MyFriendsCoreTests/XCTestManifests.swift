@@ -104,6 +104,12 @@ extension DiscoveryTests {
         ("testDiscoverWithEmptySearcherInterestsStillReturnsOpenProfilesWithScoreZero", testDiscoverWithEmptySearcherInterestsStillReturnsOpenProfilesWithScoreZero),
         ("testDiscoverScoreMatchesMatchScoreOutputForTheSameInputs", testDiscoverScoreMatchesMatchScoreOutputForTheSameInputs),
         ("testDiscoverSearcherWithoutOpenToFriendsCanStillBrowseOpenProfiles", testDiscoverSearcherWithoutOpenToFriendsCanStillBrowseOpenProfiles),
+        // AC#3: radius-based discovery
+        ("testDiscoverWithRadiusReturnsOnlyProfilesWithinThatRadius", testDiscoverWithRadiusReturnsOnlyProfilesWithinThatRadius),
+        ("testDiscoverWithRadiusExcludesProfilesWithoutALocation", testDiscoverWithRadiusExcludesProfilesWithoutALocation),
+        ("testDiscoverWithRadiusStillHonoursTheOpenToFriendsGate", testDiscoverWithRadiusStillHonoursTheOpenToFriendsGate),
+        ("testDiscoverWithRadiusResultsAreOrderedByScoreDescending", testDiscoverWithRadiusResultsAreOrderedByScoreDescending),
+        ("testDiscoverWithAllFourRadiusValuesUsesTheCorrectThresholds", testDiscoverWithAllFourRadiusValuesUsesTheCorrectThresholds),
     ]
 }
 
@@ -145,6 +151,23 @@ extension MessagingTests {
         ("testSendConnectionRequestSucceedsForEachRequestUpToTheDailyLimit", testSendConnectionRequestSucceedsForEachRequestUpToTheDailyLimit),
         ("testSendConnectionRequestIsRejectedOnceDailyLimitIsReached", testSendConnectionRequestIsRejectedOnceDailyLimitIsReached),
         ("testConnectionRequestLimitsArePerRequesterAndDoNotAffectOtherRequesters", testConnectionRequestLimitsArePerRequesterAndDoNotAffectOtherRequesters),
+        // C14: sendConnectionRequestResult — typed refusal reasons
+        ("testSendConnectionRequestResultReturnsAllowedWithConnectionOnSuccess", testSendConnectionRequestResultReturnsAllowedWithConnectionOnSuccess),
+        ("testSendConnectionRequestResultReturnsBlankIdWhenRequesterIdIsBlank", testSendConnectionRequestResultReturnsBlankIdWhenRequesterIdIsBlank),
+        ("testSendConnectionRequestResultReturnsBlankIdWhenRecipientIdIsEmpty", testSendConnectionRequestResultReturnsBlankIdWhenRecipientIdIsEmpty),
+        ("testSendConnectionRequestResultReturnsSelfRequestWhenIdsAreEqual", testSendConnectionRequestResultReturnsSelfRequestWhenIdsAreEqual),
+        ("testSendConnectionRequestResultReturnsBlockedWhenRecipientBlockedRequester", testSendConnectionRequestResultReturnsBlockedWhenRecipientBlockedRequester),
+        ("testSendConnectionRequestResultReturnsBlockedWhenRequesterBlockedRecipient", testSendConnectionRequestResultReturnsBlockedWhenRequesterBlockedRecipient),
+        ("testSendConnectionRequestResultReturnsAlreadyExistsOnDuplicateRequest", testSendConnectionRequestResultReturnsAlreadyExistsOnDuplicateRequest),
+        ("testSendConnectionRequestResultReturnsRateLimitExceededAfterDailyLimit", testSendConnectionRequestResultReturnsRateLimitExceededAfterDailyLimit),
+        // C14: sendMessageResult — typed refusal reasons
+        ("testSendMessageResultReturnsAllowedWithMessageOnSuccess", testSendMessageResultReturnsAllowedWithMessageOnSuccess),
+        ("testSendMessageResultReturnsNotConnectedWhenNoConnectionExists", testSendMessageResultReturnsNotConnectedWhenNoConnectionExists),
+        ("testSendMessageResultReturnsNotConnectedWhenConnectionIsPending", testSendMessageResultReturnsNotConnectedWhenConnectionIsPending),
+        ("testSendMessageResultReturnsBlockedWhenRecipientHasBlockedSender", testSendMessageResultReturnsBlockedWhenRecipientHasBlockedSender),
+        ("testSendMessageResultReturnsBlankBodyWhenBodyIsBlank", testSendMessageResultReturnsBlankBodyWhenBodyIsBlank),
+        ("testSendMessageResultReturnsBodyTooLongWhenBodyExceedsLimit", testSendMessageResultReturnsBodyTooLongWhenBodyExceedsLimit),
+        ("testSendMessageResultReturnsAllowedForBodyAtMaximumLength", testSendMessageResultReturnsAllowedForBodyAtMaximumLength),
     ]
 }
 

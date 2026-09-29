@@ -22,8 +22,7 @@ public struct ProfilePhoto: Equatable {
 /// it defaults to `nil` and the profile is considered incomplete (see
 /// `isComplete`). `biography` is optional: a profile can be created without one,
 /// in which case it defaults to the empty string. `interests` and `activities`
-/// are optional lists that default to empty. Other attributes (age, location)
-/// are intentionally out of scope here.
+/// are optional lists that default to empty.
 ///
 /// `openToFriends` defaults to false: a person must deliberately turn it on
 /// before they surface in anyone else's discovery results (AC#2). Turning it
@@ -46,6 +45,21 @@ public struct Profile {
     /// profile appears in `ProfileRepository.findOpen()` results.
     public var openToFriends: Bool
 
+    /// The profile's physical location for proximity-based discovery (AC#3).
+    ///
+    /// Stored at the precision needed for 1–25 km radius filtering. This value
+    /// is used only internally and is never shown to other users — only a
+    /// town/city label is exposed, per `docs/product-decisions.md` decision 3.
+    /// It is read only while the person is actively using the app (AC#12 /
+    /// constitution P4, enforceable). Kept for as long as the account exists
+    /// and deleted together with the profile on account deletion (constitution
+    /// P1, enforceable).
+    ///
+    /// `nil` means location access has not been granted or the location is not
+    /// yet known; profiles without a location are excluded from radius-filtered
+    /// discovery results.
+    public let location: GeoLocation?
+
     /// Whether the profile is complete. A profile is complete only when it has
     /// a `photo`.
     public var isComplete: Bool {
@@ -59,7 +73,8 @@ public struct Profile {
         biography: String = "",
         interests: [String] = [],
         activities: [String] = [],
-        openToFriends: Bool = false
+        openToFriends: Bool = false,
+        location: GeoLocation? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -68,5 +83,6 @@ public struct Profile {
         self.interests = interests
         self.activities = activities
         self.openToFriends = openToFriends
+        self.location = location
     }
 }

@@ -336,6 +336,191 @@ class MessagingTest {
         )
     }
 
+    // ── C14: sendConnectionRequestResult — typed refusal reasons ─────────
+
+    @Test
+    fun `sendConnectionRequestResult returns Allowed with the connection on success`() {
+        val (_, messaging) = repoWithUsers("alice", "bob")
+
+        val result = messaging.sendConnectionRequestResult(requesterId = "alice", recipientId = "bob")
+
+        assertTrue(result is ConnectionRequestResult.Allowed)
+        assertEquals(ConnectionStatus.PENDING, result.connection.status)
+        assertEquals("alice", result.connection.requesterId)
+        assertEquals("bob", result.connection.recipientId)
+    }
+
+    @Test
+    fun `sendConnectionRequestResult returns Refused with BLANK_ID when requester id is blank`() {
+        val (_, messaging) = repoWithUsers("alice")
+
+        val result = messaging.sendConnectionRequestResult(requesterId = " ", recipientId = "alice")
+
+        assertTrue(result is ConnectionRequestResult.Refused)
+        assertEquals(ConnectionRequestRefusal.BLANK_ID, result.reason)
+    }
+
+    @Test
+    fun `sendConnectionRequestResult returns Refused with BLANK_ID when recipient id is blank`() {
+        val (_, messaging) = repoWithUsers("alice")
+
+        val result = messaging.sendConnectionRequestResult(requesterId = "alice", recipientId = "")
+
+        assertTrue(result is ConnectionRequestResult.Refused)
+        assertEquals(ConnectionRequestRefusal.BLANK_ID, result.reason)
+    }
+
+    @Test
+    fun `sendConnectionRequestResult returns Refused with SELF_REQUEST when ids are equal`() {
+        val (_, messaging) = repoWithUsers("alice")
+
+        val result = messaging.sendConnectionRequestResult(requesterId = "alice", recipientId = "alice")
+
+        assertTrue(result is ConnectionRequestResult.Refused)
+        assertEquals(ConnectionRequestRefusal.SELF_REQUEST, result.reason)
+    }
+
+    @Test
+    fun `sendConnectionRequestResult returns Refused with BLOCKED when recipient blocked requester`() {
+        val (profiles, messaging) = repoWithUsers("alice", "bob")
+        profiles.blockUser(blockerId = "bob", blockedId = "alice")
+
+        val result = messaging.sendConnectionRequestResult(requesterId = "alice", recipientId = "bob")
+
+        assertTrue(result is ConnectionRequestResult.Refused)
+        assertEquals(ConnectionRequestRefusal.BLOCKED, result.reason)
+    }
+
+    @Test
+    fun `sendConnectionRequestResult returns Refused with BLOCKED when requester blocked recipient`() {
+        val (profiles, messaging) = repoWithUsers("alice", "bob")
+        profiles.blockUser(blockerId = "alice", blockedId = "bob")
+
+        val result = messaging.sendConnectionRequestResult(requesterId = "alice", recipientId = "bob")
+
+        assertTrue(result is ConnectionRequestResult.Refused)
+        assertEquals(ConnectionRequestRefusal.BLOCKED, result.reason)
+    }
+
+    @Test
+    fun `sendConnectionRequestResult returns Refused with ALREADY_EXISTS on duplicate request`() {
+        val (_, messaging) = repoWithUsers("alice", "bob")
+        messaging.sendConnectionRequest(requesterId = "alice", recipientId = "bob")
+
+        val result = messaging.sendConnectionRequestResult(requesterId = "alice", recipientId = "bob")
+
+        assertTrue(result is ConnectionRequestResult.Refused)
+        assertEquals(ConnectionRequestRefusal.ALREADY_EXISTS, result.reason)
+    }
+
+    @Test
+    fun `sendConnectionRequestResult returns Refused with RATE_LIMIT_EXCEEDED after daily limit`() {
+        val profileRepo = ProfileRepository()
+        profileRepo.save(Profile(id = "alice", displayName = "Alice", photo = validPhoto()))
+        for (i in 1..(MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1)) {
+            profileRepo.save(Profile(id = "user-$i", displayName = "User $i", photo = validPhoto()))
+        }
+        val messaging = MessagingRepository(profileRepo)
+        for (i in 1..MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY) {
+            messaging.sendConnectionRequest(requesterId = "alice", recipientId = "user-$i")
+        }
+
+        val result = messaging.sendConnectionRequestResult(
+            requesterId = "alice",
+            recipientId = "user-${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1}",
+        )
+
+        assertTrue(result is ConnectionRequestResult.Refused)
+        assertEquals(ConnectionRequestRefusal.RATE_LIMIT_EXCEEDED, result.reason)
+    }
+
+    // ── C14: sendMessageResult — typed refusal reasons ────────────────────
+
+    @Test
+    fun `sendMessageResult returns Allowed with the message on success`() {
+        val (_, messaging) = repoWithUsers("alice", "bob")
+        val connection = messaging.sendConnectionRequest(requesterId = "alice", recipientId = "bob")!!
+        messaging.acceptConnectionRequest(connectionId = connection.id, acceptorId = "bob")
+
+        val result = messaging.sendMessageResult(senderId = "alice", recipientId = "bob", body = "Hello")
+
+        assertTrue(result is MessageResult.Allowed)
+        assertEquals("alice", result.message.senderId)
+        assertEquals("bob", result.message.recipientId)
+        assertEquals("Hello", result.message.body)
+    }
+
+    @Test
+    fun `sendMessageResult returns Refused with NOT_CONNECTED when no connection exists`() {
+        val (_, messaging) = repoWithUsers("alice", "bob")
+
+        val result = messaging.sendMessageResult(senderId = "alice", recipientId = "bob", body = "Hello")
+
+        assertTrue(result is MessageResult.Refused)
+        assertEquals(MessageRefusal.NOT_CONNECTED, result.reason)
+    }
+
+    @Test
+    fun `sendMessageResult returns Refused with NOT_CONNECTED when connection is still pending`() {
+        val (_, messaging) = repoWithUsers("alice", "bob")
+        messaging.sendConnectionRequest(requesterId = "alice", recipientId = "bob")
+
+        val result = messaging.sendMessageResult(senderId = "alice", recipientId = "bob", body = "Hello")
+
+        assertTrue(result is MessageResult.Refused)
+        assertEquals(MessageRefusal.NOT_CONNECTED, result.reason)
+    }
+
+    @Test
+    fun `sendMessageResult returns Refused with BLOCKED when recipient blocked sender`() {
+        val (profiles, messaging) = repoWithUsers("alice", "bob")
+        val connection = messaging.sendConnectionRequest(requesterId = "alice", recipientId = "bob")!!
+        messaging.acceptConnectionRequest(connectionId = connection.id, acceptorId = "bob")
+        profiles.blockUser(blockerId = "bob", blockedId = "alice")
+
+        val result = messaging.sendMessageResult(senderId = "alice", recipientId = "bob", body = "Hello")
+
+        assertTrue(result is MessageResult.Refused)
+        assertEquals(MessageRefusal.BLOCKED, result.reason)
+    }
+
+    @Test
+    fun `sendMessageResult returns Refused with BLANK_BODY when body is blank`() {
+        val (_, messaging) = repoWithUsers("alice", "bob")
+        val connection = messaging.sendConnectionRequest(requesterId = "alice", recipientId = "bob")!!
+        messaging.acceptConnectionRequest(connectionId = connection.id, acceptorId = "bob")
+
+        val result = messaging.sendMessageResult(senderId = "alice", recipientId = "bob", body = "   ")
+
+        assertTrue(result is MessageResult.Refused)
+        assertEquals(MessageRefusal.BLANK_BODY, result.reason)
+    }
+
+    @Test
+    fun `sendMessageResult returns Refused with BODY_TOO_LONG when body exceeds limit`() {
+        val (_, messaging) = repoWithUsers("alice", "bob")
+        val connection = messaging.sendConnectionRequest(requesterId = "alice", recipientId = "bob")!!
+        messaging.acceptConnectionRequest(connectionId = connection.id, acceptorId = "bob")
+        val tooLong = "a".repeat(MessagingRepository.MAX_MESSAGE_LENGTH + 1)
+
+        val result = messaging.sendMessageResult(senderId = "alice", recipientId = "bob", body = tooLong)
+
+        assertTrue(result is MessageResult.Refused)
+        assertEquals(MessageRefusal.BODY_TOO_LONG, result.reason)
+    }
+
+    @Test
+    fun `sendMessageResult returns Allowed for a body exactly at the maximum length`() {
+        val (_, messaging) = repoWithUsers("alice", "bob")
+        val connection = messaging.sendConnectionRequest(requesterId = "alice", recipientId = "bob")!!
+        messaging.acceptConnectionRequest(connectionId = connection.id, acceptorId = "bob")
+        val maxBody = "a".repeat(MessagingRepository.MAX_MESSAGE_LENGTH)
+
+        val result = messaging.sendMessageResult(senderId = "alice", recipientId = "bob", body = maxBody)
+
+        assertTrue(result is MessageResult.Allowed)
+    }
+
     @Test
     fun `getMessages does not include messages from a different pair`() {
         val (_, messaging) = repoWithUsers("alice", "bob", "carol")

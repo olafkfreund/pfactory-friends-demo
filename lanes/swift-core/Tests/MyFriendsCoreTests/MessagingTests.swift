@@ -325,4 +325,204 @@ final class MessagingTests: XCTestCase {
             )
         )
     }
+
+    // MARK: - C14: sendConnectionRequestResult — typed refusal reasons
+
+    func testSendConnectionRequestResultReturnsAllowedWithConnectionOnSuccess() {
+        let (_, messaging) = reposWithUsers("alice", "bob")
+
+        let result = messaging.sendConnectionRequestResult(requesterId: "alice", recipientId: "bob")
+
+        guard case .allowed(let connection) = result else {
+            return XCTFail("Expected .allowed, got \(result)")
+        }
+        XCTAssertEqual(connection.status, .pending)
+        XCTAssertEqual(connection.requesterId, "alice")
+        XCTAssertEqual(connection.recipientId, "bob")
+    }
+
+    func testSendConnectionRequestResultReturnsBlankIdWhenRequesterIdIsBlank() {
+        let (_, messaging) = reposWithUsers("alice")
+
+        let result = messaging.sendConnectionRequestResult(requesterId: " ", recipientId: "alice")
+
+        guard case .refused(let reason) = result else {
+            return XCTFail("Expected .refused, got \(result)")
+        }
+        XCTAssertEqual(reason, .blankId)
+    }
+
+    func testSendConnectionRequestResultReturnsBlankIdWhenRecipientIdIsEmpty() {
+        let (_, messaging) = reposWithUsers("alice")
+
+        let result = messaging.sendConnectionRequestResult(requesterId: "alice", recipientId: "")
+
+        guard case .refused(let reason) = result else {
+            return XCTFail("Expected .refused, got \(result)")
+        }
+        XCTAssertEqual(reason, .blankId)
+    }
+
+    func testSendConnectionRequestResultReturnsSelfRequestWhenIdsAreEqual() {
+        let (_, messaging) = reposWithUsers("alice")
+
+        let result = messaging.sendConnectionRequestResult(requesterId: "alice", recipientId: "alice")
+
+        guard case .refused(let reason) = result else {
+            return XCTFail("Expected .refused, got \(result)")
+        }
+        XCTAssertEqual(reason, .selfRequest)
+    }
+
+    func testSendConnectionRequestResultReturnsBlockedWhenRecipientBlockedRequester() {
+        let (profiles, messaging) = reposWithUsers("alice", "bob")
+        profiles.blockUser(blockerId: "bob", blockedId: "alice")
+
+        let result = messaging.sendConnectionRequestResult(requesterId: "alice", recipientId: "bob")
+
+        guard case .refused(let reason) = result else {
+            return XCTFail("Expected .refused, got \(result)")
+        }
+        XCTAssertEqual(reason, .blocked)
+    }
+
+    func testSendConnectionRequestResultReturnsBlockedWhenRequesterBlockedRecipient() {
+        let (profiles, messaging) = reposWithUsers("alice", "bob")
+        profiles.blockUser(blockerId: "alice", blockedId: "bob")
+
+        let result = messaging.sendConnectionRequestResult(requesterId: "alice", recipientId: "bob")
+
+        guard case .refused(let reason) = result else {
+            return XCTFail("Expected .refused, got \(result)")
+        }
+        XCTAssertEqual(reason, .blocked)
+    }
+
+    func testSendConnectionRequestResultReturnsAlreadyExistsOnDuplicateRequest() {
+        let (_, messaging) = reposWithUsers("alice", "bob")
+        messaging.sendConnectionRequest(requesterId: "alice", recipientId: "bob")
+
+        let result = messaging.sendConnectionRequestResult(requesterId: "alice", recipientId: "bob")
+
+        guard case .refused(let reason) = result else {
+            return XCTFail("Expected .refused, got \(result)")
+        }
+        XCTAssertEqual(reason, .alreadyExists)
+    }
+
+    func testSendConnectionRequestResultReturnsRateLimitExceededAfterDailyLimit() {
+        let profileRepo = ProfileRepository()
+        try! profileRepo.save(Profile(id: "alice", displayName: "Alice", photo: validPhoto()))
+        for i in 1...(MessagingRepository.maxConnectionRequestsPerDay + 1) {
+            try! profileRepo.save(Profile(id: "user-\(i)", displayName: "User \(i)", photo: validPhoto()))
+        }
+        let messaging = MessagingRepository(profileRepository: profileRepo)
+        for i in 1...MessagingRepository.maxConnectionRequestsPerDay {
+            messaging.sendConnectionRequest(requesterId: "alice", recipientId: "user-\(i)")
+        }
+
+        let result = messaging.sendConnectionRequestResult(
+            requesterId: "alice",
+            recipientId: "user-\(MessagingRepository.maxConnectionRequestsPerDay + 1)"
+        )
+
+        guard case .refused(let reason) = result else {
+            return XCTFail("Expected .refused, got \(result)")
+        }
+        XCTAssertEqual(reason, .rateLimitExceeded)
+    }
+
+    // MARK: - C14: sendMessageResult — typed refusal reasons
+
+    func testSendMessageResultReturnsAllowedWithMessageOnSuccess() {
+        let (_, messaging) = reposWithUsers("alice", "bob")
+        let connection = messaging.sendConnectionRequest(requesterId: "alice", recipientId: "bob")!
+        messaging.acceptConnectionRequest(connectionId: connection.id, acceptorId: "bob")
+
+        let result = messaging.sendMessageResult(senderId: "alice", recipientId: "bob", body: "Hello")
+
+        guard case .allowed(let message) = result else {
+            return XCTFail("Expected .allowed, got \(result)")
+        }
+        XCTAssertEqual(message.senderId, "alice")
+        XCTAssertEqual(message.recipientId, "bob")
+        XCTAssertEqual(message.body, "Hello")
+    }
+
+    func testSendMessageResultReturnsNotConnectedWhenNoConnectionExists() {
+        let (_, messaging) = reposWithUsers("alice", "bob")
+
+        let result = messaging.sendMessageResult(senderId: "alice", recipientId: "bob", body: "Hello")
+
+        guard case .refused(let reason) = result else {
+            return XCTFail("Expected .refused, got \(result)")
+        }
+        XCTAssertEqual(reason, .notConnected)
+    }
+
+    func testSendMessageResultReturnsNotConnectedWhenConnectionIsPending() {
+        let (_, messaging) = reposWithUsers("alice", "bob")
+        messaging.sendConnectionRequest(requesterId: "alice", recipientId: "bob")
+
+        let result = messaging.sendMessageResult(senderId: "alice", recipientId: "bob", body: "Hello")
+
+        guard case .refused(let reason) = result else {
+            return XCTFail("Expected .refused, got \(result)")
+        }
+        XCTAssertEqual(reason, .notConnected)
+    }
+
+    func testSendMessageResultReturnsBlockedWhenRecipientHasBlockedSender() {
+        let (profiles, messaging) = reposWithUsers("alice", "bob")
+        let connection = messaging.sendConnectionRequest(requesterId: "alice", recipientId: "bob")!
+        messaging.acceptConnectionRequest(connectionId: connection.id, acceptorId: "bob")
+        profiles.blockUser(blockerId: "bob", blockedId: "alice")
+
+        let result = messaging.sendMessageResult(senderId: "alice", recipientId: "bob", body: "Hello")
+
+        guard case .refused(let reason) = result else {
+            return XCTFail("Expected .refused, got \(result)")
+        }
+        XCTAssertEqual(reason, .blocked)
+    }
+
+    func testSendMessageResultReturnsBlankBodyWhenBodyIsBlank() {
+        let (_, messaging) = reposWithUsers("alice", "bob")
+        let connection = messaging.sendConnectionRequest(requesterId: "alice", recipientId: "bob")!
+        messaging.acceptConnectionRequest(connectionId: connection.id, acceptorId: "bob")
+
+        let result = messaging.sendMessageResult(senderId: "alice", recipientId: "bob", body: "   ")
+
+        guard case .refused(let reason) = result else {
+            return XCTFail("Expected .refused, got \(result)")
+        }
+        XCTAssertEqual(reason, .blankBody)
+    }
+
+    func testSendMessageResultReturnsBodyTooLongWhenBodyExceedsLimit() {
+        let (_, messaging) = reposWithUsers("alice", "bob")
+        let connection = messaging.sendConnectionRequest(requesterId: "alice", recipientId: "bob")!
+        messaging.acceptConnectionRequest(connectionId: connection.id, acceptorId: "bob")
+        let tooLong = String(repeating: "a", count: MessagingRepository.maxMessageLength + 1)
+
+        let result = messaging.sendMessageResult(senderId: "alice", recipientId: "bob", body: tooLong)
+
+        guard case .refused(let reason) = result else {
+            return XCTFail("Expected .refused, got \(result)")
+        }
+        XCTAssertEqual(reason, .bodyTooLong)
+    }
+
+    func testSendMessageResultReturnsAllowedForBodyAtMaximumLength() {
+        let (_, messaging) = reposWithUsers("alice", "bob")
+        let connection = messaging.sendConnectionRequest(requesterId: "alice", recipientId: "bob")!
+        messaging.acceptConnectionRequest(connectionId: connection.id, acceptorId: "bob")
+        let maxBody = String(repeating: "a", count: MessagingRepository.maxMessageLength)
+
+        let result = messaging.sendMessageResult(senderId: "alice", recipientId: "bob", body: maxBody)
+
+        if case .refused = result {
+            XCTFail("Expected .allowed for body at max length, got .refused")
+        }
+    }
 }

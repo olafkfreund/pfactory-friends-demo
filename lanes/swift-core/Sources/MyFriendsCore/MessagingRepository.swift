@@ -44,13 +44,8 @@ public final class MessagingRepository {
     /// Attempts to send a connection request from `requesterId` to `recipientId`.
     ///
     /// Returns the newly created `Connection` (with status `.pending`) on
-    /// success, or `nil` when any of the following are true:
-    /// - either id is blank or whitespace-only;
-    /// - the requester and recipient are the same person;
-    /// - either party has blocked the other (AC#7 / P5);
-    /// - a connection between this pair already exists (in either direction);
-    /// - the requester has already sent `maxConnectionRequestsPerDay` or more
-    ///   new connection requests in the rolling 24-hour window (AC#5).
+    /// success, or `nil` on any failure. To obtain the machine-readable refusal
+    /// reason, use `sendConnectionRequestResult(...)` instead.
     ///
     /// Only successfully created connections count toward the rate limit; rejected
     /// duplicates and blocked attempts do not.
@@ -59,24 +54,59 @@ public final class MessagingRepository {
     /// `acceptConnectionRequest(...)` (AC#6).
     @discardableResult
     public func sendConnectionRequest(requesterId: String, recipientId: String) -> Connection? {
+        switch sendConnectionRequestResult(requesterId: requesterId, recipientId: recipientId) {
+        case .allowed(let connection): return connection
+        case .refused: return nil
+        }
+    }
+
+    /// Attempts to send a connection request from `requesterId` to `recipientId`,
+    /// returning a `ConnectionRequestResult` that carries the outcome and, on
+    /// refusal, the machine-readable `ConnectionRequestRefusal` reason.
+    ///
+    /// C14: every eligibility and refusal decision the core makes carries a
+    /// machine-readable reason so a client can tell a person why something was
+    /// refused and an auditor can verify the correct policy was applied.
+    ///
+    /// Returns `.allowed(connection:)` with the new `Connection` (status `.pending`)
+    /// on success. Returns `.refused(reason:)` with a `ConnectionRequestRefusal` when
+    /// any of the following are true:
+    /// - either id is blank or whitespace-only → `.blankId`;
+    /// - the requester and recipient are the same person → `.selfRequest`;
+    /// - either party has blocked the other → `.blocked`;
+    /// - a connection between this pair already exists → `.alreadyExists`;
+    /// - the requester has reached the daily limit → `.rateLimitExceeded`.
+    ///
+    /// The same algorithm is in the Kotlin lane (MessagingRepository.kt),
+    /// constitution P9.
+    public func sendConnectionRequestResult(requesterId: String, recipientId: String) -> ConnectionRequestResult {
         guard !requesterId.trimmingCharacters(in: .whitespaces).isEmpty,
-              !recipientId.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-        guard requesterId != recipientId else { return nil }
+              !recipientId.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return .refused(reason: .blankId)
+        }
+        guard requesterId != recipientId else {
+            return .refused(reason: .selfRequest)
+        }
         // AC#7 / P5: a blocked user cannot initiate or receive a connection request.
-        guard !profileRepository.isBlocked(blockerId: recipientId, blockedId: requesterId) else { return nil }
-        guard !profileRepository.isBlocked(blockerId: requesterId, blockedId: recipientId) else { return nil }
+        guard !profileRepository.isBlocked(blockerId: recipientId, blockedId: requesterId),
+              !profileRepository.isBlocked(blockerId: requesterId, blockedId: recipientId) else {
+            return .refused(reason: .blocked)
+        }
         let connectionId = canonicalConnectionId(requesterId, recipientId)
         // Idempotency: if a connection already exists (pending or accepted), reject the
-        // new attempt rather than silently creating a duplicate. Duplicate attempts do
-        // not consume a rate-limit slot.
-        guard connections[connectionId] == nil else { return nil }
+        // new attempt rather than silently creating a duplicate.
+        guard connections[connectionId] == nil else {
+            return .refused(reason: .alreadyExists)
+        }
         // AC#5: at most maxConnectionRequestsPerDay new requests in any 24-hour window.
         let nowSeconds = Date().timeIntervalSince1970
         let windowStart = nowSeconds - MessagingRepository.secondsPerDay
         var timestamps = requestTimestamps[requesterId, default: []]
         // Prune expired entries so the dictionary does not grow without bound.
         timestamps = timestamps.filter { $0 >= windowStart }
-        guard timestamps.count < MessagingRepository.maxConnectionRequestsPerDay else { return nil }
+        guard timestamps.count < MessagingRepository.maxConnectionRequestsPerDay else {
+            return .refused(reason: .rateLimitExceeded)
+        }
         let connection = Connection(
             id: connectionId,
             requesterId: requesterId,
@@ -85,7 +115,7 @@ public final class MessagingRepository {
         connections[connectionId] = connection
         timestamps.append(nowSeconds)
         requestTimestamps[requesterId] = timestamps
-        return connection
+        return .allowed(connection: connection)
     }
 
     /// Accepts the pending connection identified by `connectionId` on behalf of
@@ -125,24 +155,55 @@ public final class MessagingRepository {
 
     /// Sends a message from `senderId` to `recipientId` with the given `body`.
     ///
-    /// Returns the persisted `Message` on success. Returns `nil` when any of
-    /// the following are true:
-    /// - `senderId` and `recipientId` do not hold an `.accepted` connection (AC#6);
-    /// - `recipientId` has blocked `senderId` (AC#7 / P5);
-    /// - `body` is blank or whitespace-only;
-    /// - `body` exceeds `MessagingRepository.maxMessageLength` characters
-    ///   (measured in extended grapheme clusters via `String.count`).
+    /// Returns the persisted `Message` on success. Returns `nil` on any failure.
+    /// To obtain the machine-readable refusal reason, use `sendMessageResult(...)`
+    /// instead.
     ///
     /// The `body` is stored as supplied; no trimming is applied. The caller is
     /// responsible for any display normalisation before calling.
     public func sendMessage(senderId: String, recipientId: String, body: String) -> Message? {
+        switch sendMessageResult(senderId: senderId, recipientId: recipientId, body: body) {
+        case .allowed(let message): return message
+        case .refused: return nil
+        }
+    }
+
+    /// Sends a message from `senderId` to `recipientId` with the given `body`,
+    /// returning a `MessageResult` that carries the outcome and, on refusal,
+    /// the machine-readable `MessageRefusal` reason.
+    ///
+    /// C14: every eligibility and refusal decision the core makes carries a
+    /// machine-readable reason so a client can tell a person why something was
+    /// refused and an auditor can verify the correct policy was applied.
+    ///
+    /// Returns `.allowed(message:)` with the persisted `Message` on success.
+    /// Returns `.refused(reason:)` with a `MessageRefusal` when any of the
+    /// following are true:
+    /// - the pair does not hold an `.accepted` connection → `.notConnected`;
+    /// - `recipientId` has blocked `senderId` → `.blocked`;
+    /// - `body` is blank or whitespace-only → `.blankBody`;
+    /// - `body` exceeds `maxMessageLength` characters → `.bodyTooLong`.
+    ///
+    /// The `body` is stored as supplied; no trimming is applied.
+    ///
+    /// The same algorithm is in the Kotlin lane (MessagingRepository.kt),
+    /// constitution P9.
+    public func sendMessageResult(senderId: String, recipientId: String, body: String) -> MessageResult {
         // AC#6: the pair must hold an .accepted connection.
-        guard areConnected(userId1: senderId, userId2: recipientId) else { return nil }
+        guard areConnected(userId1: senderId, userId2: recipientId) else {
+            return .refused(reason: .notConnected)
+        }
         // AC#7 / P5: a blocked user cannot send messages.
-        guard !profileRepository.isBlocked(blockerId: recipientId, blockedId: senderId) else { return nil }
+        guard !profileRepository.isBlocked(blockerId: recipientId, blockedId: senderId) else {
+            return .refused(reason: .blocked)
+        }
         // Message body validation.
-        guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        guard body.count <= MessagingRepository.maxMessageLength else { return nil }
+        guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .refused(reason: .blankBody)
+        }
+        guard body.count <= MessagingRepository.maxMessageLength else {
+            return .refused(reason: .bodyTooLong)
+        }
         let messageId = "msg-\(nextMessageId)"
         nextMessageId += 1
         let message = Message(
@@ -152,7 +213,7 @@ public final class MessagingRepository {
             body: body
         )
         messages.append(message)
-        return message
+        return .allowed(message: message)
     }
 
     /// Returns all messages exchanged between `userId1` and `userId2`, in the
