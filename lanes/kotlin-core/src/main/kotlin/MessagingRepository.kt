@@ -41,13 +41,8 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
      * Attempts to send a connection request from [requesterId] to [recipientId].
      *
      * Returns the newly created [Connection] (with status [ConnectionStatus.PENDING])
-     * on success, or `null` when any of the following are true:
-     * - either id is blank or whitespace-only;
-     * - the requester and recipient are the same person;
-     * - either party has blocked the other (AC#7 / P5);
-     * - a connection between this pair already exists (in either direction);
-     * - the requester has already sent [MAX_CONNECTION_REQUESTS_PER_DAY] or more
-     *   new connection requests in the rolling 24-hour window (AC#5).
+     * on success, or `null` on any failure. To obtain the machine-readable refusal
+     * reason, use [sendConnectionRequestResult] instead.
      *
      * Only successfully created connections count toward the rate limit; rejected
      * duplicates and blocked attempts do not.
@@ -55,24 +50,58 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
      * Messaging is not permitted until the recipient calls
      * [acceptConnectionRequest] (AC#6).
      */
-    fun sendConnectionRequest(requesterId: String, recipientId: String): Connection? {
-        if (requesterId.isBlank() || recipientId.isBlank()) return null
-        if (requesterId == recipientId) return null
+    fun sendConnectionRequest(requesterId: String, recipientId: String): Connection? =
+        when (val outcome = sendConnectionRequestResult(requesterId, recipientId)) {
+            is ConnectionRequestResult.Allowed -> outcome.connection
+            is ConnectionRequestResult.Refused -> null
+        }
+
+    /**
+     * Attempts to send a connection request from [requesterId] to [recipientId],
+     * returning a [ConnectionRequestResult] that carries the outcome and, on
+     * refusal, the machine-readable [ConnectionRequestRefusal] reason.
+     *
+     * C14: every eligibility and refusal decision the core makes carries a
+     * machine-readable reason so a client can tell a person why something was
+     * refused and an auditor can verify the correct policy was applied.
+     *
+     * Returns [ConnectionRequestResult.Allowed] with the new [Connection] (status
+     * [ConnectionStatus.PENDING]) on success. Returns [ConnectionRequestResult.Refused]
+     * with a [ConnectionRequestRefusal] when any of the following are true:
+     * - either id is blank or whitespace-only → [ConnectionRequestRefusal.BLANK_ID];
+     * - the requester and recipient are the same person → [ConnectionRequestRefusal.SELF_REQUEST];
+     * - either party has blocked the other → [ConnectionRequestRefusal.BLOCKED];
+     * - a connection between this pair already exists → [ConnectionRequestRefusal.ALREADY_EXISTS];
+     * - the requester has reached the daily limit → [ConnectionRequestRefusal.RATE_LIMIT_EXCEEDED].
+     *
+     * The same algorithm is in the Swift lane (MessagingRepository.swift),
+     * constitution P9.
+     */
+    fun sendConnectionRequestResult(
+        requesterId: String,
+        recipientId: String,
+    ): ConnectionRequestResult {
+        if (requesterId.isBlank() || recipientId.isBlank())
+            return ConnectionRequestResult.Refused(ConnectionRequestRefusal.BLANK_ID)
+        if (requesterId == recipientId)
+            return ConnectionRequestResult.Refused(ConnectionRequestRefusal.SELF_REQUEST)
         // AC#7 / P5: a blocked user cannot initiate or receive a connection request.
-        if (profileRepository.isBlocked(blockerId = recipientId, blockedId = requesterId)) return null
-        if (profileRepository.isBlocked(blockerId = requesterId, blockedId = recipientId)) return null
+        if (profileRepository.isBlocked(blockerId = recipientId, blockedId = requesterId) ||
+            profileRepository.isBlocked(blockerId = requesterId, blockedId = recipientId))
+            return ConnectionRequestResult.Refused(ConnectionRequestRefusal.BLOCKED)
         val connectionId = canonicalConnectionId(requesterId, recipientId)
-        // Idempotency: if a connection already exists (pending or accepted), reject the
-        // new attempt rather than silently creating a duplicate. Duplicate attempts do
-        // not consume a rate-limit slot.
-        if (connections.containsKey(connectionId)) return null
+        // Idempotency: if a connection already exists (pending or accepted), refuse the
+        // new attempt rather than silently creating a duplicate.
+        if (connections.containsKey(connectionId))
+            return ConnectionRequestResult.Refused(ConnectionRequestRefusal.ALREADY_EXISTS)
         // AC#5: at most MAX_CONNECTION_REQUESTS_PER_DAY new requests in any 24-hour window.
         val nowMs = System.currentTimeMillis()
         val windowStartMs = nowMs - MILLIS_PER_DAY
         val timestamps = requestTimestamps.getOrPut(requesterId) { mutableListOf() }
         // Prune expired entries so the map does not grow without bound.
         timestamps.removeAll { it < windowStartMs }
-        if (timestamps.size >= MAX_CONNECTION_REQUESTS_PER_DAY) return null
+        if (timestamps.size >= MAX_CONNECTION_REQUESTS_PER_DAY)
+            return ConnectionRequestResult.Refused(ConnectionRequestRefusal.RATE_LIMIT_EXCEEDED)
         val connection = Connection(
             id = connectionId,
             requesterId = requesterId,
@@ -80,7 +109,7 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
         )
         connections[connectionId] = connection
         timestamps.add(nowMs)
-        return connection
+        return ConnectionRequestResult.Allowed(connection)
     }
 
     /**
@@ -119,26 +148,52 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
     /**
      * Sends a message from [senderId] to [recipientId] with the given [body].
      *
-     * Returns the persisted [Message] on success.  Returns `null` when any of
-     * the following are true:
-     * - [senderId] and [recipientId] do not hold an [ConnectionStatus.ACCEPTED]
-     *   connection (AC#6);
-     * - [recipientId] has blocked [senderId] (AC#7 / P5);
-     * - [body] is blank or whitespace-only;
-     * - [body] exceeds [MAX_MESSAGE_LENGTH] characters (measured as UTF-16 code
-     *   units via [String.length]).
+     * Returns the persisted [Message] on success. Returns `null` on any failure.
+     * To obtain the machine-readable refusal reason, use [sendMessageResult] instead.
      *
-     * The [body] is stored as supplied; no trimming is applied.  The caller is
+     * The [body] is stored as supplied; no trimming is applied. The caller is
      * responsible for any display normalisation before calling.
      */
-    fun sendMessage(senderId: String, recipientId: String, body: String): Message? {
+    fun sendMessage(senderId: String, recipientId: String, body: String): Message? =
+        when (val outcome = sendMessageResult(senderId, recipientId, body)) {
+            is MessageResult.Allowed -> outcome.message
+            is MessageResult.Refused -> null
+        }
+
+    /**
+     * Sends a message from [senderId] to [recipientId] with the given [body],
+     * returning a [MessageResult] that carries the outcome and, on refusal,
+     * the machine-readable [MessageRefusal] reason.
+     *
+     * C14: every eligibility and refusal decision the core makes carries a
+     * machine-readable reason so a client can tell a person why something was
+     * refused and an auditor can verify the correct policy was applied.
+     *
+     * Returns [MessageResult.Allowed] with the persisted [Message] on success.
+     * Returns [MessageResult.Refused] with a [MessageRefusal] when any of the
+     * following are true:
+     * - the pair does not hold an ACCEPTED connection → [MessageRefusal.NOT_CONNECTED];
+     * - [recipientId] has blocked [senderId] → [MessageRefusal.BLOCKED];
+     * - [body] is blank or whitespace-only → [MessageRefusal.BLANK_BODY];
+     * - [body] exceeds [MAX_MESSAGE_LENGTH] → [MessageRefusal.BODY_TOO_LONG].
+     *
+     * The [body] is stored as supplied; no trimming is applied.
+     *
+     * The same algorithm is in the Swift lane (MessagingRepository.swift),
+     * constitution P9.
+     */
+    fun sendMessageResult(senderId: String, recipientId: String, body: String): MessageResult {
         // AC#6: the pair must hold an ACCEPTED connection.
-        if (!areConnected(senderId, recipientId)) return null
+        if (!areConnected(senderId, recipientId))
+            return MessageResult.Refused(MessageRefusal.NOT_CONNECTED)
         // AC#7 / P5: a blocked user cannot send messages.
-        if (profileRepository.isBlocked(blockerId = recipientId, blockedId = senderId)) return null
+        if (profileRepository.isBlocked(blockerId = recipientId, blockedId = senderId))
+            return MessageResult.Refused(MessageRefusal.BLOCKED)
         // Message body validation.
-        if (body.isBlank()) return null
-        if (body.length > MAX_MESSAGE_LENGTH) return null
+        if (body.isBlank())
+            return MessageResult.Refused(MessageRefusal.BLANK_BODY)
+        if (body.length > MAX_MESSAGE_LENGTH)
+            return MessageResult.Refused(MessageRefusal.BODY_TOO_LONG)
         val message = Message(
             id = "msg-${nextMessageId++}",
             senderId = senderId,
@@ -146,7 +201,7 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
             body = body,
         )
         messages.add(message)
-        return message
+        return MessageResult.Allowed(message)
     }
 
     /**
