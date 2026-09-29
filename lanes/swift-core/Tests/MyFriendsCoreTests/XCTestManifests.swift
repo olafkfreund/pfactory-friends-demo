@@ -123,6 +123,8 @@ extension DiscoveryTests {
         ("testDiscoverShowsAdultCandidatesToAnAdultSearcher", testDiscoverShowsAdultCandidatesToAnAdultSearcher),
         // AC#1 / P3 + AC#3 / P4: radius filter composes with age-bracket isolation
         ("testDiscoverWithRadiusAppliesAgeBracketIsolation", testDiscoverWithRadiusAppliesAgeBracketIsolation),
+        // AC#7 / P5 + AC#3 / P4: radius filter composes with block relationship
+        ("testDiscoverWithRadiusStillHonoursTheBlockRelationship", testDiscoverWithRadiusStillHonoursTheBlockRelationship),
     ]
 }
 

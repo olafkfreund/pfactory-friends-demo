@@ -34,8 +34,8 @@ mentioning any of that is not being helpful. It is being dangerous.
 | `.factory/constitution.md` | The customer's own engineering policy. PFactory reads this and turns the clauses marked enforceable into hard gates. |
 | `docs/plan/` | The plan PFactory emitted, and every review finding with its citation. |
 | `docs/audit/` | The governance record: source document, findings, human approval, signed task contract, verification verdict. |
-| `lanes/swift-core/` | A Swift package with 171 tests covering all twelve acceptance criteria. Proof that the Swift verification lane actually executes. |
-| `lanes/kotlin-core/` | A Kotlin module with 171 tests covering all twelve acceptance criteria. Proof that the Kotlin verification lane actually executes. |
+| `lanes/swift-core/` | A Swift package with 172 tests covering all twelve acceptance criteria. Proof that the Swift verification lane actually executes. |
+| `lanes/kotlin-core/` | A Kotlin module with 172 tests covering all twelve acceptance criteria. Proof that the Kotlin verification lane actually executes. |
 
 ## The brief is deliberately incomplete
 
@@ -82,7 +82,7 @@ asserts the executed count equals the number of `@Test` methods in source so
 that a test silently not running shows up as a mismatch rather than a pass.
 
 **Swift verifies too, for library code.** `swift test` on `lanes/swift-core`
-reports `Executed 171 tests, with 0 failures`. Getting there took four wrong
+reports `Executed 172 tests, with 0 failures`. Getting there took four wrong
 answers, the last of which was concluding the lane was impossible — nixpkgs ships
 no `libIndexStore.so`, so SwiftPM's automatic test discovery is broken, but the
 pre-5.4 `LinuxMain.swift` convention still works.
