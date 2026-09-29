@@ -121,6 +121,8 @@ extension DiscoveryTests {
         ("testDiscoverExcludesMinorCandidatesFromAnAdultSearcher", testDiscoverExcludesMinorCandidatesFromAnAdultSearcher),
         ("testDiscoverShowsMinorCandidatesToAMinorSearcher", testDiscoverShowsMinorCandidatesToAMinorSearcher),
         ("testDiscoverShowsAdultCandidatesToAnAdultSearcher", testDiscoverShowsAdultCandidatesToAnAdultSearcher),
+        // AC#1 / P3 + AC#3 / P4: radius filter composes with age-bracket isolation
+        ("testDiscoverWithRadiusAppliesAgeBracketIsolation", testDiscoverWithRadiusAppliesAgeBracketIsolation),
     ]
 }
 

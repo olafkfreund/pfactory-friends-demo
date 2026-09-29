@@ -542,4 +542,53 @@ class DiscoveryTest {
         assertEquals(1, results.size)
         assertEquals("adult-25", results[0].profile.id)
     }
+
+    @Test
+    fun `discover with radius applies age-bracket isolation`() {
+        // A minor searcher must not see adult candidates even when they are
+        // within the requested radius. The radius overload delegates to discover(searcher)
+        // which applies age-bracket isolation before the distance filter, so both
+        // constraints are always in effect simultaneously (AC#1 / constitution P3,
+        // AC#3 / constitution P4).
+        //
+        // The same algorithm and test exist in the Swift lane
+        // (DiscoveryTests.testDiscoverWithRadiusAppliesAgeBracketIsolation),
+        // per constitution P9.
+        val repository = ProfileRepository()
+        val searcher = Profile(
+            id = "minor-searcher",
+            displayName = "Minor Searcher",
+            photo = validPhoto(),
+            age = 17,
+        )
+        // An adult candidate nearby: inside the radius but wrong age bracket.
+        repository.save(
+            Profile(
+                id = "adult-nearby",
+                displayName = "Adult Nearby",
+                photo = validPhoto(),
+                age = ProfileRepository.MIN_ADULT_AGE,
+                openToFriends = true,
+                location = locationAt(0.005),   // ~0.56 km — well within 25 km
+            ),
+        )
+        // A minor candidate nearby: inside the radius and the correct age bracket.
+        repository.save(
+            Profile(
+                id = "minor-nearby",
+                displayName = "Minor Nearby",
+                photo = validPhoto(),
+                age = 16,
+                openToFriends = true,
+                location = locationAt(0.005),   // ~0.56 km — well within 25 km
+            ),
+        )
+
+        val results = repository.discover(searcher, baseLocation, SearchRadius.TWENTY_FIVE)
+
+        // Only the fellow minor should appear; the adult is excluded by
+        // age-bracket isolation even though they are within the radius.
+        assertEquals(1, results.size)
+        assertEquals("minor-nearby", results[0].profile.id)
+    }
 }
