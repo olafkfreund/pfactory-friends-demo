@@ -17,6 +17,16 @@ data class Profile(
     val biography: String = "",
     val interests: List<String> = emptyList(),
     val activities: List<String> = emptyList(),
+    /**
+     * Whether this person is currently open to meeting new friends.
+     *
+     * Defaults to false: a person must deliberately turn the toggle on before
+     * they surface in anyone else's discovery results (AC#2). Turning it off
+     * removes them from discovery immediately at the domain layer; the
+     * one-minute SLA stated in AC#2 is an infrastructure concern (cache TTL
+     * or push-propagation latency) outside the scope of this model.
+     */
+    val openToFriends: Boolean = false,
 ) {
     /**
      * Whether the profile is complete. A profile is complete only when it has

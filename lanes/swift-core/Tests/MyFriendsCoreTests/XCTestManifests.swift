@@ -16,6 +16,24 @@ extension MatchScoreTests {
     ]
 }
 
+// AC#2: open-to-friends toggle
+extension ProfileRepositoryTests {
+    static let __allTests = [
+        ("testFreshlyCreatedProfileHasOpenToFriendsFalseByDefault", testFreshlyCreatedProfileHasOpenToFriendsFalseByDefault),
+        ("testSetOpenToFriendsTrueMarksProfileAsOpen", testSetOpenToFriendsTrueMarksProfileAsOpen),
+        ("testSetOpenToFriendsFalseMarksProfileAsClosed", testSetOpenToFriendsFalseMarksProfileAsClosed),
+        ("testSetOpenToFriendsOnUnknownIdReturnsFalse", testSetOpenToFriendsOnUnknownIdReturnsFalse),
+        ("testFindOpenReturnsOnlyOpenProfiles", testFindOpenReturnsOnlyOpenProfiles),
+        ("testFindOpenExcludesProfileAfterFlagIsTurnedOff", testFindOpenExcludesProfileAfterFlagIsTurnedOff),
+        ("testFindOpenReturnsEmptyListWhenNoProfilesAreOpen", testFindOpenReturnsEmptyListWhenNoProfilesAreOpen),
+        ("testProfileSavedWithOpenToFriendsTrueAppearsInFindOpenImmediately", testProfileSavedWithOpenToFriendsTrueAppearsInFindOpenImmediately),
+        ("testFindOpenReturnsAllOpenProfilesWhenMultipleExist", testFindOpenReturnsAllOpenProfilesWhenMultipleExist),
+    ]
+}
+
 public func __allDiscoveredTests() -> [XCTestCaseEntry] {
-    return [testCase(MatchScoreTests.__allTests)]
+    return [
+        testCase(MatchScoreTests.__allTests),
+        testCase(ProfileRepositoryTests.__allTests),
+    ]
 }

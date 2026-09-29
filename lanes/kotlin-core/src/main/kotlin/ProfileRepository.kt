@@ -155,6 +155,33 @@ class ProfileRepository {
         return true
     }
 
+    /**
+     * Sets the [Profile.openToFriends] flag for the profile with [id] to [open].
+     * Returns true if the profile was found and updated; returns false (rather
+     * than throwing) when the id was never stored.
+     *
+     * AC#2: turning the flag off removes the person from every other person's
+     * discovery results immediately at this layer (see [findOpen]). The
+     * one-minute SLA in AC#2 is an infrastructure concern (cache TTL or
+     * push-propagation latency) outside the scope of this in-process
+     * repository.
+     */
+    fun setOpenToFriends(id: String, open: Boolean): Boolean {
+        val profile = profiles[id] ?: return false
+        profiles[id] = profile.copy(openToFriends = open)
+        return true
+    }
+
+    /**
+     * Returns all stored profiles whose [Profile.openToFriends] flag is true.
+     *
+     * AC#2: discovery surfaces only people who have deliberately turned the
+     * flag on. This is the domain-layer gate; the SLA that the change
+     * propagates within one minute is an infrastructure concern handled
+     * outside this repository.
+     */
+    fun findOpen(): List<Profile> = profiles.values.filter { it.openToFriends }
+
     companion object {
         /**
          * Maximum allowed display-name length, measured after trimming, in
