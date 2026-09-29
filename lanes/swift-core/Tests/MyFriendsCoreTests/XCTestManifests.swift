@@ -134,6 +134,10 @@ extension MessagingTests {
         ("testGetMessagesReturnsAllMessagesBetweenTwoUsersInChronologicalOrder", testGetMessagesReturnsAllMessagesBetweenTwoUsersInChronologicalOrder),
         ("testGetMessagesIsSymmetricSwappingArgumentOrderReturnsSameList", testGetMessagesIsSymmetricSwappingArgumentOrderReturnsSameList),
         ("testGetMessagesDoesNotIncludeMessagesFromADifferentPair", testGetMessagesDoesNotIncludeMessagesFromADifferentPair),
+        // AC#5: connection request rate limiting
+        ("testSendConnectionRequestSucceedsForEachRequestUpToTheDailyLimit", testSendConnectionRequestSucceedsForEachRequestUpToTheDailyLimit),
+        ("testSendConnectionRequestIsRejectedOnceDailyLimitIsReached", testSendConnectionRequestIsRejectedOnceDailyLimitIsReached),
+        ("testConnectionRequestLimitsArePerRequesterAndDoNotAffectOtherRequesters", testConnectionRequestLimitsArePerRequesterAndDoNotAffectOtherRequesters),
     ]
 }
 

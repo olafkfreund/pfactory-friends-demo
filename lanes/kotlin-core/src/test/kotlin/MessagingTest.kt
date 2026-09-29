@@ -266,6 +266,76 @@ class MessagingTest {
         assertEquals(ab, ba)
     }
 
+    // ── AC#5: connection request rate limiting ────────────────────────────
+
+    @Test
+    fun `sendConnectionRequest succeeds for each request up to the daily limit`() {
+        // AC#5: exactly MAX_CONNECTION_REQUESTS_PER_DAY new requests must succeed.
+        val profileRepo = ProfileRepository()
+        profileRepo.save(Profile(id = "alice", displayName = "Alice", photo = validPhoto()))
+        for (i in 1..MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY) {
+            profileRepo.save(Profile(id = "user-$i", displayName = "User $i", photo = validPhoto()))
+        }
+        val messaging = MessagingRepository(profileRepo)
+
+        for (i in 1..MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY) {
+            assertNotNull(
+                messaging.sendConnectionRequest(requesterId = "alice", recipientId = "user-$i"),
+                "request $i should succeed",
+            )
+        }
+    }
+
+    @Test
+    fun `sendConnectionRequest is rejected once the daily limit is reached`() {
+        // AC#5: the request immediately after the limit is returned as null.
+        val profileRepo = ProfileRepository()
+        profileRepo.save(Profile(id = "alice", displayName = "Alice", photo = validPhoto()))
+        for (i in 1..(MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1)) {
+            profileRepo.save(Profile(id = "user-$i", displayName = "User $i", photo = validPhoto()))
+        }
+        val messaging = MessagingRepository(profileRepo)
+
+        // Exhaust the daily limit.
+        for (i in 1..MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY) {
+            messaging.sendConnectionRequest(requesterId = "alice", recipientId = "user-$i")
+        }
+
+        // The next new request exceeds the limit and is rejected.
+        assertNull(
+            messaging.sendConnectionRequest(
+                requesterId = "alice",
+                recipientId = "user-${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1}",
+            ),
+        )
+    }
+
+    @Test
+    fun `connection request limits are per requester and do not affect other users`() {
+        // AC#5: each requester has an independent counter; exhausting alice's
+        // limit does not prevent bob from sending requests.
+        val profileRepo = ProfileRepository()
+        profileRepo.save(Profile(id = "alice", displayName = "Alice", photo = validPhoto()))
+        profileRepo.save(Profile(id = "bob", displayName = "Bob", photo = validPhoto()))
+        for (i in 1..(MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1)) {
+            profileRepo.save(Profile(id = "user-$i", displayName = "User $i", photo = validPhoto()))
+        }
+        val messaging = MessagingRepository(profileRepo)
+
+        // Alice exhausts her daily limit.
+        for (i in 1..MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY) {
+            messaging.sendConnectionRequest(requesterId = "alice", recipientId = "user-$i")
+        }
+
+        // Bob is not affected — his limit is separate.
+        assertNotNull(
+            messaging.sendConnectionRequest(
+                requesterId = "bob",
+                recipientId = "user-${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1}",
+            ),
+        )
+    }
+
     @Test
     fun `getMessages does not include messages from a different pair`() {
         val (_, messaging) = repoWithUsers("alice", "bob", "carol")

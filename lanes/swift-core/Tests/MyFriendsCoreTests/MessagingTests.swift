@@ -258,4 +258,71 @@ final class MessagingTests: XCTestCase {
         XCTAssertEqual(acMessages.count, 1)
         XCTAssertEqual(acMessages[0].body, "Hello Carol")
     }
+
+    // MARK: - AC#5: connection request rate limiting
+
+    func testSendConnectionRequestSucceedsForEachRequestUpToTheDailyLimit() {
+        // AC#5: exactly maxConnectionRequestsPerDay new requests must succeed.
+        let profileRepo = ProfileRepository()
+        try! profileRepo.save(Profile(id: "alice", displayName: "Alice", photo: validPhoto()))
+        for i in 1...MessagingRepository.maxConnectionRequestsPerDay {
+            try! profileRepo.save(Profile(id: "user-\(i)", displayName: "User \(i)", photo: validPhoto()))
+        }
+        let messaging = MessagingRepository(profileRepository: profileRepo)
+
+        for i in 1...MessagingRepository.maxConnectionRequestsPerDay {
+            XCTAssertNotNil(
+                messaging.sendConnectionRequest(requesterId: "alice", recipientId: "user-\(i)"),
+                "request \(i) should succeed"
+            )
+        }
+    }
+
+    func testSendConnectionRequestIsRejectedOnceDailyLimitIsReached() {
+        // AC#5: the request immediately after the limit is returned as nil.
+        let profileRepo = ProfileRepository()
+        try! profileRepo.save(Profile(id: "alice", displayName: "Alice", photo: validPhoto()))
+        for i in 1...(MessagingRepository.maxConnectionRequestsPerDay + 1) {
+            try! profileRepo.save(Profile(id: "user-\(i)", displayName: "User \(i)", photo: validPhoto()))
+        }
+        let messaging = MessagingRepository(profileRepository: profileRepo)
+
+        // Exhaust the daily limit.
+        for i in 1...MessagingRepository.maxConnectionRequestsPerDay {
+            messaging.sendConnectionRequest(requesterId: "alice", recipientId: "user-\(i)")
+        }
+
+        // The next new request exceeds the limit and is rejected.
+        XCTAssertNil(
+            messaging.sendConnectionRequest(
+                requesterId: "alice",
+                recipientId: "user-\(MessagingRepository.maxConnectionRequestsPerDay + 1)"
+            )
+        )
+    }
+
+    func testConnectionRequestLimitsArePerRequesterAndDoNotAffectOtherRequesters() {
+        // AC#5: each requester has an independent counter; exhausting alice's
+        // limit does not prevent bob from sending requests.
+        let profileRepo = ProfileRepository()
+        try! profileRepo.save(Profile(id: "alice", displayName: "Alice", photo: validPhoto()))
+        try! profileRepo.save(Profile(id: "bob", displayName: "Bob", photo: validPhoto()))
+        for i in 1...(MessagingRepository.maxConnectionRequestsPerDay + 1) {
+            try! profileRepo.save(Profile(id: "user-\(i)", displayName: "User \(i)", photo: validPhoto()))
+        }
+        let messaging = MessagingRepository(profileRepository: profileRepo)
+
+        // Alice exhausts her daily limit.
+        for i in 1...MessagingRepository.maxConnectionRequestsPerDay {
+            messaging.sendConnectionRequest(requesterId: "alice", recipientId: "user-\(i)")
+        }
+
+        // Bob is not affected — his limit is separate.
+        XCTAssertNotNil(
+            messaging.sendConnectionRequest(
+                requesterId: "bob",
+                recipientId: "user-\(MessagingRepository.maxConnectionRequestsPerDay + 1)"
+            )
+        )
+    }
 }

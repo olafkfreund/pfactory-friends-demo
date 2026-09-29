@@ -1,3 +1,5 @@
+import Foundation
+
 /// In-process repository for `Connection`s and `Message`s.
 ///
 /// AC#6: two people can exchange messages only after both have accepted the
@@ -27,6 +29,14 @@ public final class MessagingRepository {
     private var nextMessageId: Int = 0
     private let profileRepository: ProfileRepository
 
+    /// Tracks the epoch-second timestamps of each successfully sent connection
+    /// request, keyed by requester id.
+    ///
+    /// AC#5: at most `maxConnectionRequestsPerDay` new requests per requester in
+    /// any rolling 24-hour window. Entries older than the current window are
+    /// pruned on each call to keep the dictionary bounded.
+    private var requestTimestamps: [String: [TimeInterval]] = [:]
+
     public init(profileRepository: ProfileRepository) {
         self.profileRepository = profileRepository
     }
@@ -38,7 +48,12 @@ public final class MessagingRepository {
     /// - either id is blank or whitespace-only;
     /// - the requester and recipient are the same person;
     /// - either party has blocked the other (AC#7 / P5);
-    /// - a connection between this pair already exists (in either direction).
+    /// - a connection between this pair already exists (in either direction);
+    /// - the requester has already sent `maxConnectionRequestsPerDay` or more
+    ///   new connection requests in the rolling 24-hour window (AC#5).
+    ///
+    /// Only successfully created connections count toward the rate limit; rejected
+    /// duplicates and blocked attempts do not.
     ///
     /// Messaging is not permitted until the recipient calls
     /// `acceptConnectionRequest(...)` (AC#6).
@@ -52,14 +67,24 @@ public final class MessagingRepository {
         guard !profileRepository.isBlocked(blockerId: requesterId, blockedId: recipientId) else { return nil }
         let connectionId = canonicalConnectionId(requesterId, recipientId)
         // Idempotency: if a connection already exists (pending or accepted), reject the
-        // new attempt rather than silently creating a duplicate.
+        // new attempt rather than silently creating a duplicate. Duplicate attempts do
+        // not consume a rate-limit slot.
         guard connections[connectionId] == nil else { return nil }
+        // AC#5: at most maxConnectionRequestsPerDay new requests in any 24-hour window.
+        let nowSeconds = Date().timeIntervalSince1970
+        let windowStart = nowSeconds - MessagingRepository.secondsPerDay
+        var timestamps = requestTimestamps[requesterId, default: []]
+        // Prune expired entries so the dictionary does not grow without bound.
+        timestamps = timestamps.filter { $0 >= windowStart }
+        guard timestamps.count < MessagingRepository.maxConnectionRequestsPerDay else { return nil }
         let connection = Connection(
             id: connectionId,
             requesterId: requesterId,
             recipientId: recipientId
         )
         connections[connectionId] = connection
+        timestamps.append(nowSeconds)
+        requestTimestamps[requesterId] = timestamps
         return connection
     }
 
@@ -143,6 +168,17 @@ public final class MessagingRepository {
     }
 
     // MARK: - Constants
+
+    /// Maximum number of new connection requests a single user may send in any
+    /// rolling 24-hour window (AC#5).
+    ///
+    /// Only successfully created connections count; duplicate and blocked
+    /// attempts do not. Mirrors `MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY`
+    /// in the Kotlin lane (constitution P9).
+    public static let maxConnectionRequestsPerDay: Int = 20
+
+    /// Length of the rate-limit window in seconds (24 hours).
+    private static let secondsPerDay: TimeInterval = 24 * 60 * 60
 
     /// Maximum allowed message body length, measured in extended grapheme
     /// clusters (Swift's `String.count`).
