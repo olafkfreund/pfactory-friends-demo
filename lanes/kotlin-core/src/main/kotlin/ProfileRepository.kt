@@ -126,6 +126,17 @@ class ProfileRepository {
         } else {
             null
         }
+        // Age assurance, per constitution P3 (enforceable): any feature
+        // reachable by someone under 18 must state its age-assurance mechanism
+        // and what changes for a minor. The domain-layer floor is MIN_AGE (16),
+        // reflecting that the brief explicitly includes 16- and 17-year-olds.
+        // Collecting a birth date is not an age-assurance mechanism (P3): the
+        // full assurance flow lives in the UI layer; this check is the
+        // domain-layer guard that prevents a profile below the minimum age from
+        // ever reaching storage.
+        require(profile.age >= MIN_AGE) {
+            "age must be at least $MIN_AGE"
+        }
         require(profile.interests.size <= MAX_INTERESTS) {
             "interests must be at most $MAX_INTERESTS entries"
         }
@@ -398,5 +409,25 @@ class ProfileRepository {
          * per-entry length or content rule implied here.
          */
         const val MAX_ACTIVITIES: Int = 10
+
+        /**
+         * Minimum allowed age for a profile, in whole years.
+         *
+         * Set to 16 because the product brief explicitly includes "Older
+         * teenagers aged 16 and 17" as a named user segment. Anyone younger
+         * than 16 is outside the stated target and must not be stored.
+         *
+         * Constitution P3 (enforceable): any feature reachable by someone
+         * under 18 must state its age-assurance mechanism and what changes for
+         * a minor. Collecting a birth date is not an age-assurance mechanism.
+         * This constant is the domain-layer floor; a full assurance flow (e.g.
+         * date-of-birth collection with a third-party verification step) is a
+         * UI-layer concern and is deliberately out of scope for this
+         * in-process repository.
+         *
+         * The same constant is declared in the Swift lane as `minAge`
+         * (constitution P9).
+         */
+        const val MIN_AGE: Int = 16
     }
 }

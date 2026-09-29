@@ -699,4 +699,52 @@ final class ProfileRepositoryTests: XCTestCase {
         XCTAssertEqual(results.count, 1)
         XCTAssertEqual(results[0].profile.id, "grace")
     }
+
+    // AC#1 / constitution P3: age field and minimum-age enforcement
+
+    func testAProfileWithTheMinimumAgeIsAccepted() {
+        // AC#1: the profile carries an age. minAge (16) is the lowest accepted
+        // value, reflecting that the brief includes 16- and 17-year-olds.
+        let repository = ProfileRepository()
+        try! repository.save(Profile(id: "user-1", displayName: "Ada Lovelace", photo: validPhoto(), age: ProfileRepository.minAge))
+
+        XCTAssertEqual(repository.find(id: "user-1")?.age, ProfileRepository.minAge)
+    }
+
+    func testAProfileAgeBelowTheMinimumThrowsAndPersistsNothing() {
+        // Constitution P3 (enforceable): any feature reachable by someone under
+        // 18 must state its age-assurance mechanism. The domain-layer floor
+        // rejects anyone below minAge (16) before anything is stored.
+        let repository = ProfileRepository()
+
+        XCTAssertThrowsError(
+            try repository.save(Profile(id: "user-1", displayName: "Ada Lovelace", photo: validPhoto(), age: ProfileRepository.minAge - 1))
+        ) { error in
+            XCTAssertEqual(error as? ProfileRepositoryError, ProfileRepositoryError.ageBelowMinimum)
+        }
+        XCTAssertNil(repository.find(id: "user-1"))
+    }
+
+    func testAProfileAtAge17IsAcceptedAsAValidMinorAboveTheMinimum() {
+        // The brief names 16-and-17-year-olds as a user segment. Both are
+        // above minAge (16) and must be accepted.
+        let repository = ProfileRepository()
+        try! repository.save(Profile(id: "user-1", displayName: "Ada Lovelace", photo: validPhoto(), age: 17))
+
+        XCTAssertEqual(repository.find(id: "user-1")?.age, 17)
+    }
+
+    func testAProfileAtAge18IsAcceptedAsAnAdult() {
+        let repository = ProfileRepository()
+        try! repository.save(Profile(id: "user-1", displayName: "Ada Lovelace", photo: validPhoto(), age: 18))
+
+        XCTAssertEqual(repository.find(id: "user-1")?.age, 18)
+    }
+
+    func testAgeIsStoredAndReadsBackTheSameValue() {
+        let repository = ProfileRepository()
+        try! repository.save(Profile(id: "user-1", displayName: "Ada Lovelace", photo: validPhoto(), age: 25))
+
+        XCTAssertEqual(repository.find(id: "user-1")?.age, 25)
+    }
 }

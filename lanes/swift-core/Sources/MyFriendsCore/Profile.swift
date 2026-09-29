@@ -30,6 +30,13 @@ public struct ProfilePhoto: Equatable {
 /// one-minute SLA stated in AC#2 is an infrastructure concern (cache TTL or
 /// push-propagation latency) outside the scope of this model.
 ///
+/// `age` is the person's self-reported age in whole years (AC#1). It is stored
+/// as entered; the domain layer enforces the minimum-age floor at save time
+/// (see `ProfileRepository.minAge`). `age` defaults to 18 (the primary
+/// audience per the product brief) so that callers that do not yet pass an
+/// explicit age still produce a valid profile; production callers must always
+/// supply a real age collected from the person.
+///
 /// The same shape exists verbatim in the Kotlin lane (Profile.kt) so that both
 /// platforms share one model of a profile (constitution P9).
 public struct Profile {
@@ -60,6 +67,16 @@ public struct Profile {
     /// discovery results.
     public let location: GeoLocation?
 
+    /// The person's self-reported age in whole years (AC#1).
+    ///
+    /// Must be at least `ProfileRepository.minAge` (16). The minimum covers
+    /// the "Older teenagers aged 16 and 17" segment stated in the product
+    /// brief and the age-assurance requirement in constitution P3 (enforceable).
+    ///
+    /// Age data is personal data, kept for as long as the account exists and
+    /// deleted together with the profile on account deletion (constitution P1).
+    public let age: Int
+
     /// Whether the profile is complete. A profile is complete only when it has
     /// a `photo`.
     public var isComplete: Bool {
@@ -74,7 +91,8 @@ public struct Profile {
         interests: [String] = [],
         activities: [String] = [],
         openToFriends: Bool = false,
-        location: GeoLocation? = nil
+        location: GeoLocation? = nil,
+        age: Int = 18
     ) {
         self.id = id
         self.displayName = displayName
@@ -84,5 +102,6 @@ public struct Profile {
         self.activities = activities
         self.openToFriends = openToFriends
         self.location = location
+        self.age = age
     }
 }

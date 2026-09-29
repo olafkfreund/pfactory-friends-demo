@@ -27,6 +27,13 @@ public enum ProfileRepositoryError: Error, Equatable {
     case tooManyInterests
     /// The activities list exceeded `ProfileRepository.maxActivities` entries.
     case tooManyActivities
+    /// The age was below `ProfileRepository.minAge` (16).
+    ///
+    /// Constitution P3 (enforceable): any feature reachable by someone under
+    /// 18 must state its age-assurance mechanism and what changes for a minor.
+    /// The minimum age of 16 reflects the product brief's explicit inclusion of
+    /// 16- and 17-year-olds. Anyone below this floor must not be stored.
+    case ageBelowMinimum
 }
 
 /// In-process storage for `Profile` records.
@@ -140,6 +147,14 @@ public final class ProfileRepository {
             throw ProfileRepositoryError.tooManyActivities
         }
 
+        // Age assurance, per constitution P3 (enforceable): any feature
+        // reachable by someone under 18 must state its age-assurance mechanism
+        // and what changes for a minor. The domain-layer floor is minAge (16),
+        // reflecting that the brief explicitly includes 16- and 17-year-olds.
+        guard profile.age >= ProfileRepository.minAge else {
+            throw ProfileRepositoryError.ageBelowMinimum
+        }
+
         // Store what was validated. Storing the original profile unchanged would
         // mean the check and the record disagreed: "  Ada  " would be measured
         // as 3 characters and kept as 7. The same rule applies to the biography
@@ -152,7 +167,8 @@ public final class ProfileRepository {
             interests: profile.interests,
             activities: profile.activities,
             openToFriends: profile.openToFriends,
-            location: profile.location
+            location: profile.location,
+            age: profile.age
         )
     }
 
@@ -251,7 +267,8 @@ public final class ProfileRepository {
             interests: profile.interests,
             activities: profile.activities,
             openToFriends: profile.openToFriends,
-            location: profile.location
+            location: profile.location,
+            age: profile.age
         )
         return true
     }
@@ -354,4 +371,19 @@ public final class ProfileRepository {
     ///
     /// Placeholder value pending a product decision.
     public static let maxActivities: Int = 10
+
+    /// Minimum allowed age for a profile, in whole years.
+    ///
+    /// Set to 16 because the product brief explicitly includes "Older
+    /// teenagers aged 16 and 17" as a named user segment. Anyone younger
+    /// than 16 is outside the stated target and must not be stored.
+    ///
+    /// Constitution P3 (enforceable): any feature reachable by someone
+    /// under 18 must state its age-assurance mechanism and what changes for
+    /// a minor. Collecting a birth date is not an age-assurance mechanism.
+    /// This constant is the domain-layer floor; a full assurance flow is a
+    /// UI-layer concern outside the scope of this in-process repository.
+    ///
+    /// Mirrors `MIN_AGE` in the Kotlin lane (constitution P9).
+    public static let minAge: Int = 16
 }

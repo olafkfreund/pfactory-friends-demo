@@ -86,6 +86,12 @@ extension ProfileRepositoryTests {
         ("testIsBlockedIsDirectionalBlockingAToB_DoesNotBlockBToA", testIsBlockedIsDirectionalBlockingAToB_DoesNotBlockBToA),
         ("testDiscoverExcludesAProfileThatTheSearcherHasBlocked", testDiscoverExcludesAProfileThatTheSearcherHasBlocked),
         ("testDiscoverStillReturnsOtherOpenProfilesWhenOneIsBlocked", testDiscoverStillReturnsOtherOpenProfilesWhenOneIsBlocked),
+        // AC#1 / constitution P3: age field and minimum-age enforcement
+        ("testAProfileWithTheMinimumAgeIsAccepted", testAProfileWithTheMinimumAgeIsAccepted),
+        ("testAProfileAgeBelowTheMinimumThrowsAndPersistsNothing", testAProfileAgeBelowTheMinimumThrowsAndPersistsNothing),
+        ("testAProfileAtAge17IsAcceptedAsAValidMinorAboveTheMinimum", testAProfileAtAge17IsAcceptedAsAValidMinorAboveTheMinimum),
+        ("testAProfileAtAge18IsAcceptedAsAnAdult", testAProfileAtAge18IsAcceptedAsAnAdult),
+        ("testAgeIsStoredAndReadsBackTheSameValue", testAgeIsStoredAndReadsBackTheSameValue),
     ]
 }
 

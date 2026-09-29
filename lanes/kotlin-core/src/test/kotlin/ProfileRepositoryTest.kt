@@ -748,4 +748,56 @@ class ProfileRepositoryTest {
 
         assertFalse(repository.removePhoto("never-saved"))
     }
+
+    // AC#1 / constitution P3: age field and minimum-age enforcement
+
+    @Test
+    fun `a profile with the minimum age is accepted`() {
+        // AC#1: the profile carries an age. MIN_AGE (16) is the lowest accepted
+        // value, reflecting that the brief includes 16- and 17-year-olds.
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = ProfileRepository.MIN_AGE))
+
+        assertEquals(ProfileRepository.MIN_AGE, repository.find("user-1")?.age)
+    }
+
+    @Test
+    fun `a profile age below the minimum throws and persists nothing`() {
+        // Constitution P3 (enforceable): any feature reachable by someone under
+        // 18 must state its age-assurance mechanism. The domain-layer floor
+        // rejects anyone below MIN_AGE (16) before anything is stored.
+        val repository = ProfileRepository()
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = ProfileRepository.MIN_AGE - 1))
+        }
+        assertTrue(error.message?.contains(ProfileRepository.MIN_AGE.toString()) == true)
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
+    fun `a profile at age 17 is accepted as a valid minor above the minimum`() {
+        // The brief names 16-and-17-year-olds as a user segment. Both are
+        // above MIN_AGE (16) and must be accepted.
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = 17))
+
+        assertEquals(17, repository.find("user-1")?.age)
+    }
+
+    @Test
+    fun `a profile at age 18 is accepted as an adult`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = 18))
+
+        assertEquals(18, repository.find("user-1")?.age)
+    }
+
+    @Test
+    fun `age is stored and reads back the same value`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = 25))
+
+        assertEquals(25, repository.find("user-1")?.age)
+    }
 }
