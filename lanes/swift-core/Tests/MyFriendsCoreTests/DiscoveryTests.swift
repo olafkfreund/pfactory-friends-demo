@@ -530,4 +530,47 @@ final class DiscoveryTests: XCTestCase {
         XCTAssertEqual(results.count, 1)
         XCTAssertEqual(results[0].profile.id, "minor-nearby")
     }
+
+    func testDiscoverWithRadiusStillHonoursTheBlockRelationship() {
+        // A profile within the radius that the searcher has blocked must not appear
+        // in radius-filtered results. The radius overload calls discover(searcher:)
+        // first, which applies block relationships before the distance filter, so
+        // both constraints are always in effect simultaneously (AC#7 / constitution
+        // P5, AC#3 / constitution P4).
+        //
+        // The same algorithm and test exist in the Kotlin lane
+        // (DiscoveryTest.`discover with radius still honours the block relationship`),
+        // per constitution P9.
+        let repository = ProfileRepository()
+        let searcher = Profile(id: "searcher", displayName: "Searcher", photo: validPhoto())
+        try! repository.save(searcher)
+        // A blocked candidate nearby: inside the radius but blocked.
+        try! repository.save(Profile(
+            id: "blocked-nearby",
+            displayName: "Blocked Nearby",
+            photo: validPhoto(),
+            openToFriends: true,
+            location: locationAt(deltaLat: 0.005)   // ~0.56 km — well within 25 km
+        ))
+        repository.blockUser(blockerId: "searcher", blockedId: "blocked-nearby")
+        // An unblocked candidate nearby: inside the radius and not blocked.
+        try! repository.save(Profile(
+            id: "unblocked-nearby",
+            displayName: "Unblocked Nearby",
+            photo: validPhoto(),
+            openToFriends: true,
+            location: locationAt(deltaLat: 0.005)   // ~0.56 km — well within 25 km
+        ))
+
+        let results = repository.discover(
+            searcher: searcher,
+            near: baseLocation,
+            within: .twentyFive
+        )
+
+        // Only the unblocked profile should appear; the blocked one is excluded
+        // by the block relationship even though they are within the radius.
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results[0].profile.id, "unblocked-nearby")
+    }
 }

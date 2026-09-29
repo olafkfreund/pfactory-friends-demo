@@ -591,4 +591,48 @@ class DiscoveryTest {
         assertEquals(1, results.size)
         assertEquals("minor-nearby", results[0].profile.id)
     }
+
+    @Test
+    fun `discover with radius still honours the block relationship`() {
+        // A profile within the radius that the searcher has blocked must not appear
+        // in radius-filtered results. The radius overload delegates to discover(searcher)
+        // which applies block relationships before the distance filter, so both
+        // constraints are always in effect simultaneously (AC#7 / constitution P5,
+        // AC#3 / constitution P4).
+        //
+        // The same algorithm and test exist in the Swift lane
+        // (DiscoveryTests.testDiscoverWithRadiusStillHonoursTheBlockRelationship),
+        // per constitution P9.
+        val repository = ProfileRepository()
+        val searcher = Profile(id = "searcher", displayName = "Searcher", photo = validPhoto())
+        repository.save(searcher)
+        // A blocked candidate nearby: inside the radius but blocked.
+        repository.save(
+            Profile(
+                id = "blocked-nearby",
+                displayName = "Blocked Nearby",
+                photo = validPhoto(),
+                openToFriends = true,
+                location = locationAt(0.005),   // ~0.56 km — well within 25 km
+            ),
+        )
+        repository.blockUser(blockerId = "searcher", blockedId = "blocked-nearby")
+        // An unblocked candidate nearby: inside the radius and not blocked.
+        repository.save(
+            Profile(
+                id = "unblocked-nearby",
+                displayName = "Unblocked Nearby",
+                photo = validPhoto(),
+                openToFriends = true,
+                location = locationAt(0.005),   // ~0.56 km — well within 25 km
+            ),
+        )
+
+        val results = repository.discover(searcher, baseLocation, SearchRadius.TWENTY_FIVE)
+
+        // Only the unblocked profile should appear; the blocked one is excluded
+        // by the block relationship even though they are within the radius.
+        assertEquals(1, results.size)
+        assertEquals("unblocked-nearby", results[0].profile.id)
+    }
 }
