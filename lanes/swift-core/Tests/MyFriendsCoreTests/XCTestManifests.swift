@@ -141,11 +141,42 @@ extension MessagingTests {
     ]
 }
 
+// AC#8: reporting a person or message
+extension ReportTests {
+    static let __allTests = [
+        // submitReport: user target
+        ("testSubmitReportForAUserWithValidArgumentsReturnsThePersistedReport", testSubmitReportForAUserWithValidArgumentsReturnsThePersistedReport),
+        // submitReport: message target
+        ("testSubmitReportForAMessageWithValidArgumentsReturnsThePersistedReport", testSubmitReportForAMessageWithValidArgumentsReturnsThePersistedReport),
+        // submitReport: blank id validation
+        ("testSubmitReportWithABlankReporterIdReturnsNil", testSubmitReportWithABlankReporterIdReturnsNil),
+        ("testSubmitReportWithABlankTargetIdReturnsNil", testSubmitReportWithABlankTargetIdReturnsNil),
+        // submitReport: additionalText
+        ("testSubmitReportStoresTheTrimmedAdditionalText", testSubmitReportStoresTheTrimmedAdditionalText),
+        ("testSubmitReportWithAdditionalTextAtTheMaximumLengthIsAccepted", testSubmitReportWithAdditionalTextAtTheMaximumLengthIsAccepted),
+        ("testSubmitReportWithAdditionalTextOneCharacterOverTheMaximumLengthReturnsNil", testSubmitReportWithAdditionalTextOneCharacterOverTheMaximumLengthReturnsNil),
+        // submitReport: each reason is accepted
+        ("testSubmitReportAcceptsEachReportReason", testSubmitReportAcceptsEachReportReason),
+        // getReportsAgainst
+        ("testGetReportsAgainstReturnsAllReportsForTheGivenTarget", testGetReportsAgainstReturnsAllReportsForTheGivenTarget),
+        ("testGetReportsAgainstReturnsEmptyArrayWhenNoReportsHaveBeenFiled", testGetReportsAgainstReturnsEmptyArrayWhenNoReportsHaveBeenFiled),
+        ("testGetReportsAgainstDoesNotIncludeReportsForADifferentTarget", testGetReportsAgainstDoesNotIncludeReportsForADifferentTarget),
+        // getReportsByReporter
+        ("testGetReportsByReporterReturnsAllReportsFiledByTheGivenReporter", testGetReportsByReporterReturnsAllReportsFiledByTheGivenReporter),
+        ("testGetReportsByReporterReturnsEmptyArrayWhenReporterHasFiledNoReports", testGetReportsByReporterReturnsEmptyArrayWhenReporterHasFiledNoReports),
+        // duplicate reports
+        ("testSubmitReportAllowsMultipleReportsFromTheSameReporterAgainstTheSameTarget", testSubmitReportAllowsMultipleReportsFromTheSameReporterAgainstTheSameTarget),
+        // report ids
+        ("testEachSubmittedReportGetsADistinctId", testEachSubmittedReportGetsADistinctId),
+    ]
+}
+
 public func __allDiscoveredTests() -> [XCTestCaseEntry] {
     return [
         testCase(MatchScoreTests.__allTests),
         testCase(ProfileRepositoryTests.__allTests),
         testCase(DiscoveryTests.__allTests),
         testCase(MessagingTests.__allTests),
+        testCase(ReportTests.__allTests),
     ]
 }
