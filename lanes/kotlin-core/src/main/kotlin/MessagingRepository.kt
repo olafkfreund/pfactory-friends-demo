@@ -28,6 +28,16 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
     private var nextMessageId: Int = 0
 
     /**
+     * Tracks the epoch-millisecond timestamps of each successfully sent connection
+     * request, keyed by requester id.
+     *
+     * AC#5: at most [MAX_CONNECTION_REQUESTS_PER_DAY] new requests per requester
+     * in any rolling 24-hour window. Entries older than the current window are
+     * pruned on each call to keep the map bounded.
+     */
+    private val requestTimestamps: MutableMap<String, MutableList<Long>> = mutableMapOf()
+
+    /**
      * Attempts to send a connection request from [requesterId] to [recipientId].
      *
      * Returns the newly created [Connection] (with status [ConnectionStatus.PENDING])
@@ -35,7 +45,12 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
      * - either id is blank or whitespace-only;
      * - the requester and recipient are the same person;
      * - either party has blocked the other (AC#7 / P5);
-     * - a connection between this pair already exists (in either direction).
+     * - a connection between this pair already exists (in either direction);
+     * - the requester has already sent [MAX_CONNECTION_REQUESTS_PER_DAY] or more
+     *   new connection requests in the rolling 24-hour window (AC#5).
+     *
+     * Only successfully created connections count toward the rate limit; rejected
+     * duplicates and blocked attempts do not.
      *
      * Messaging is not permitted until the recipient calls
      * [acceptConnectionRequest] (AC#6).
@@ -48,14 +63,23 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
         if (profileRepository.isBlocked(blockerId = requesterId, blockedId = recipientId)) return null
         val connectionId = canonicalConnectionId(requesterId, recipientId)
         // Idempotency: if a connection already exists (pending or accepted), reject the
-        // new attempt rather than silently creating a duplicate.
+        // new attempt rather than silently creating a duplicate. Duplicate attempts do
+        // not consume a rate-limit slot.
         if (connections.containsKey(connectionId)) return null
+        // AC#5: at most MAX_CONNECTION_REQUESTS_PER_DAY new requests in any 24-hour window.
+        val nowMs = System.currentTimeMillis()
+        val windowStartMs = nowMs - MILLIS_PER_DAY
+        val timestamps = requestTimestamps.getOrPut(requesterId) { mutableListOf() }
+        // Prune expired entries so the map does not grow without bound.
+        timestamps.removeAll { it < windowStartMs }
+        if (timestamps.size >= MAX_CONNECTION_REQUESTS_PER_DAY) return null
         val connection = Connection(
             id = connectionId,
             requesterId = requesterId,
             recipientId = recipientId,
         )
         connections[connectionId] = connection
+        timestamps.add(nowMs)
         return connection
     }
 
@@ -151,6 +175,19 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
     }
 
     companion object {
+        /**
+         * Maximum number of new connection requests a single user may send in
+         * any rolling 24-hour window (AC#5).
+         *
+         * Only successfully created connections count; duplicate and blocked
+         * attempts do not. The same constant exists in the Swift lane as
+         * `MessagingRepository.maxConnectionRequestsPerDay` (constitution P9).
+         */
+        const val MAX_CONNECTION_REQUESTS_PER_DAY: Int = 20
+
+        /** Length of the rate-limit window in milliseconds (24 hours). */
+        private const val MILLIS_PER_DAY: Long = 24L * 60L * 60L * 1000L
+
         /**
          * Maximum allowed message body length, measured in characters
          * (UTF-16 code units, i.e. [String.length]).
