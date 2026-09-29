@@ -469,4 +469,112 @@ final class ProfileRepositoryTests: XCTestCase {
         XCTAssertTrue(open.contains(where: { $0.id == "user-2" }))
         XCTAssertFalse(open.contains(where: { $0.id == "user-3" }))
     }
+
+    // MARK: - AC#7: block user
+
+    func testBlockUserReturnsTrueWhenBothProfilesExist() {
+        let repository = ProfileRepository()
+        try! repository.save(Profile(id: "user-1", displayName: "Ada Lovelace", photo: validPhoto()))
+        try! repository.save(Profile(id: "user-2", displayName: "Grace Hopper", photo: validPhoto()))
+
+        XCTAssertTrue(repository.blockUser(blockerId: "user-1", blockedId: "user-2"))
+    }
+
+    func testBlockUserReturnsFalseWhenBlockerDoesNotExist() {
+        let repository = ProfileRepository()
+        try! repository.save(Profile(id: "user-2", displayName: "Grace Hopper", photo: validPhoto()))
+
+        XCTAssertFalse(repository.blockUser(blockerId: "unknown", blockedId: "user-2"))
+    }
+
+    func testBlockUserReturnsFalseWhenBlockedUserDoesNotExist() {
+        let repository = ProfileRepository()
+        try! repository.save(Profile(id: "user-1", displayName: "Ada Lovelace", photo: validPhoto()))
+
+        XCTAssertFalse(repository.blockUser(blockerId: "user-1", blockedId: "unknown"))
+    }
+
+    func testBlockUserIsIdempotentBlockingTheSamePersonTwiceStillReturnsTrue() {
+        let repository = ProfileRepository()
+        try! repository.save(Profile(id: "user-1", displayName: "Ada Lovelace", photo: validPhoto()))
+        try! repository.save(Profile(id: "user-2", displayName: "Grace Hopper", photo: validPhoto()))
+        repository.blockUser(blockerId: "user-1", blockedId: "user-2")
+
+        XCTAssertTrue(repository.blockUser(blockerId: "user-1", blockedId: "user-2"))
+    }
+
+    func testIsBlockedReturnsTrueAfterAUserIsBlocked() {
+        let repository = ProfileRepository()
+        try! repository.save(Profile(id: "user-1", displayName: "Ada Lovelace", photo: validPhoto()))
+        try! repository.save(Profile(id: "user-2", displayName: "Grace Hopper", photo: validPhoto()))
+        repository.blockUser(blockerId: "user-1", blockedId: "user-2")
+
+        XCTAssertTrue(repository.isBlocked(blockerId: "user-1", blockedId: "user-2"))
+    }
+
+    func testIsBlockedReturnsFalseBeforeAnyBlockIsRecorded() {
+        let repository = ProfileRepository()
+        try! repository.save(Profile(id: "user-1", displayName: "Ada Lovelace", photo: validPhoto()))
+        try! repository.save(Profile(id: "user-2", displayName: "Grace Hopper", photo: validPhoto()))
+
+        XCTAssertFalse(repository.isBlocked(blockerId: "user-1", blockedId: "user-2"))
+    }
+
+    func testIsBlockedIsDirectionalBlockingAToB_DoesNotBlockBToA() {
+        let repository = ProfileRepository()
+        try! repository.save(Profile(id: "user-1", displayName: "Ada Lovelace", photo: validPhoto()))
+        try! repository.save(Profile(id: "user-2", displayName: "Grace Hopper", photo: validPhoto()))
+        repository.blockUser(blockerId: "user-1", blockedId: "user-2")
+
+        XCTAssertFalse(repository.isBlocked(blockerId: "user-2", blockedId: "user-1"))
+    }
+
+    func testDiscoverExcludesAProfileThatTheSearcherHasBlocked() {
+        // AC#7: a blocked person never appears in the blocker's discovery results.
+        let repository = ProfileRepository()
+        let searcher = Profile(id: "searcher", displayName: "Searcher", photo: validPhoto())
+        try! repository.save(searcher)
+        try! repository.save(Profile(
+            id: "blocked",
+            displayName: "Blocked Person",
+            photo: validPhoto(),
+            openToFriends: true
+        ))
+        repository.blockUser(blockerId: "searcher", blockedId: "blocked")
+
+        let results = repository.discover(searcher: searcher)
+
+        XCTAssertFalse(results.contains(where: { $0.profile.id == "blocked" }))
+    }
+
+    func testDiscoverStillReturnsOtherOpenProfilesWhenOneIsBlocked() {
+        let repository = ProfileRepository()
+        let searcher = Profile(
+            id: "searcher",
+            displayName: "Searcher",
+            photo: validPhoto(),
+            interests: ["jazz"]
+        )
+        try! repository.save(searcher)
+        try! repository.save(Profile(
+            id: "ada",
+            displayName: "Ada Lovelace",
+            photo: validPhoto(),
+            interests: ["jazz"],
+            openToFriends: true
+        ))
+        try! repository.save(Profile(
+            id: "grace",
+            displayName: "Grace Hopper",
+            photo: validPhoto(),
+            interests: ["jazz"],
+            openToFriends: true
+        ))
+        repository.blockUser(blockerId: "searcher", blockedId: "ada")
+
+        let results = repository.discover(searcher: searcher)
+
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results[0].profile.id, "grace")
+    }
 }

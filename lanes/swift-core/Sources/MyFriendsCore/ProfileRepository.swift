@@ -55,6 +55,13 @@ public final class ProfileRepository {
 
     private var profiles: [String: Profile] = [:]
 
+    /// Tracks which profiles a given user has blocked.
+    /// Key: blocker id. Value: set of blocked ids.
+    ///
+    /// Per constitution P5: every person-to-person surface ships with
+    /// blocking in the same phase as the feature that creates the data.
+    private var blockedBy: [String: Set<String>] = [:]
+
     public init() {}
 
     /// Persists `profile`, overwriting any existing record with the same id
@@ -148,6 +155,32 @@ public final class ProfileRepository {
         )
     }
 
+    /// Records that `blockerId` has blocked `blockedId`. A blocked profile
+    /// is excluded from the blocker's discovery results (AC#7).
+    ///
+    /// Returns true if the block was recorded. Returns false if either
+    /// `blockerId` or `blockedId` is not in the repository — you can only
+    /// block a profile that exists. Blocking is idempotent: calling with
+    /// the same pair a second time still returns true.
+    ///
+    /// Per constitution P5 (enforceable): any person-to-person surface ships
+    /// with blocking in the same phase as the feature that creates the data.
+    @discardableResult
+    public func blockUser(blockerId: String, blockedId: String) -> Bool {
+        guard profiles[blockerId] != nil else { return false }
+        guard profiles[blockedId] != nil else { return false }
+        blockedBy[blockerId, default: []].insert(blockedId)
+        return true
+    }
+
+    /// Returns true if `blockerId` has blocked `blockedId`.
+    ///
+    /// The relationship is directional: A blocking B does not mean B has
+    /// blocked A.
+    public func isBlocked(blockerId: String, blockedId: String) -> Bool {
+        return blockedBy[blockerId]?.contains(blockedId) == true
+    }
+
     /// Returns all open profiles as `DiscoveryResult`s, sorted by `MatchScore`
     /// descending, excluding the searcher themselves.
     ///
@@ -167,8 +200,9 @@ public final class ProfileRepository {
     public func discover(searcher: Profile) -> [DiscoveryResult] {
         let myInterests = Set(searcher.interests)
         let myActivities = Set(searcher.activities)
+        let myBlocked = blockedBy[searcher.id] ?? []
         return profiles.values
-            .filter { $0.openToFriends && $0.id != searcher.id }
+            .filter { $0.openToFriends && $0.id != searcher.id && !myBlocked.contains($0.id) }
             .map { candidate -> DiscoveryResult in
                 let theirInterests = Set(candidate.interests)
                 let theirActivities = Set(candidate.activities)

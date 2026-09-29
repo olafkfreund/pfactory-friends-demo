@@ -581,6 +581,112 @@ class ProfileRepositoryTest {
         assertTrue(open.none { it.id == "user-3" })
     }
 
+    // AC#7: block user
+
+    @Test
+    fun `blockUser returns true when both profiles exist`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+
+        assertTrue(repository.blockUser(blockerId = "user-1", blockedId = "user-2"))
+    }
+
+    @Test
+    fun `blockUser returns false when the blocker does not exist`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+
+        assertFalse(repository.blockUser(blockerId = "unknown", blockedId = "user-2"))
+    }
+
+    @Test
+    fun `blockUser returns false when the blocked user does not exist`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertFalse(repository.blockUser(blockerId = "user-1", blockedId = "unknown"))
+    }
+
+    @Test
+    fun `blockUser is idempotent — blocking the same person twice still returns true`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+        repository.blockUser(blockerId = "user-1", blockedId = "user-2")
+
+        assertTrue(repository.blockUser(blockerId = "user-1", blockedId = "user-2"))
+    }
+
+    @Test
+    fun `isBlocked returns true after a user is blocked`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+        repository.blockUser(blockerId = "user-1", blockedId = "user-2")
+
+        assertTrue(repository.isBlocked(blockerId = "user-1", blockedId = "user-2"))
+    }
+
+    @Test
+    fun `isBlocked returns false before any block is recorded`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+
+        assertFalse(repository.isBlocked(blockerId = "user-1", blockedId = "user-2"))
+    }
+
+    @Test
+    fun `isBlocked is directional — blocking A to B does not block B to A`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+        repository.blockUser(blockerId = "user-1", blockedId = "user-2")
+
+        assertFalse(repository.isBlocked(blockerId = "user-2", blockedId = "user-1"))
+    }
+
+    @Test
+    fun `discover excludes a profile that the searcher has blocked`() {
+        // AC#7: a blocked person never appears in the blocker's discovery results.
+        val repository = ProfileRepository()
+        val searcher = Profile(id = "searcher", displayName = "Searcher", photo = validPhoto())
+        repository.save(searcher)
+        repository.save(
+            Profile(id = "blocked", displayName = "Blocked Person", photo = validPhoto(), openToFriends = true),
+        )
+        repository.blockUser(blockerId = "searcher", blockedId = "blocked")
+
+        val results = repository.discover(searcher)
+
+        assertTrue(results.none { it.profile.id == "blocked" })
+    }
+
+    @Test
+    fun `discover still returns other open profiles when one is blocked`() {
+        val repository = ProfileRepository()
+        val searcher = Profile(
+            id = "searcher",
+            displayName = "Searcher",
+            photo = validPhoto(),
+            interests = listOf("jazz"),
+        )
+        repository.save(searcher)
+        repository.save(
+            Profile(id = "ada", displayName = "Ada Lovelace", photo = validPhoto(), interests = listOf("jazz"), openToFriends = true),
+        )
+        repository.save(
+            Profile(id = "grace", displayName = "Grace Hopper", photo = validPhoto(), interests = listOf("jazz"), openToFriends = true),
+        )
+        repository.blockUser(blockerId = "searcher", blockedId = "ada")
+
+        val results = repository.discover(searcher)
+
+        assertEquals(1, results.size)
+        assertEquals("grace", results[0].profile.id)
+    }
+
     @Test
     fun `an at-limit activities list is accepted alongside an over-limit interests list being rejected`() {
         // AC-PROF-021-01: the mirror case — a list at the activities limit does
