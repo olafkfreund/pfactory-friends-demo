@@ -116,6 +116,11 @@ extension DiscoveryTests {
         ("testDiscoverWithRadiusStillHonoursTheOpenToFriendsGate", testDiscoverWithRadiusStillHonoursTheOpenToFriendsGate),
         ("testDiscoverWithRadiusResultsAreOrderedByScoreDescending", testDiscoverWithRadiusResultsAreOrderedByScoreDescending),
         ("testDiscoverWithAllFourRadiusValuesUsesTheCorrectThresholds", testDiscoverWithAllFourRadiusValuesUsesTheCorrectThresholds),
+        // AC#1 / constitution P3: age-bracket isolation in discovery
+        ("testDiscoverExcludesAdultCandidatesFromAMinorSearcher", testDiscoverExcludesAdultCandidatesFromAMinorSearcher),
+        ("testDiscoverExcludesMinorCandidatesFromAnAdultSearcher", testDiscoverExcludesMinorCandidatesFromAnAdultSearcher),
+        ("testDiscoverShowsMinorCandidatesToAMinorSearcher", testDiscoverShowsMinorCandidatesToAMinorSearcher),
+        ("testDiscoverShowsAdultCandidatesToAnAdultSearcher", testDiscoverShowsAdultCandidatesToAnAdultSearcher),
     ]
 }
 

@@ -198,6 +198,17 @@ class ProfileRepository {
      * Profiles with equal scores preserve stable insertion order
      * (`sortedByDescending` is a stable sort in Kotlin).
      *
+     * Age-bracket isolation, per constitution P3 (enforceable): any feature
+     * reachable by someone under 18 must state what changes for a minor.
+     * Discovery is age-isolated: a searcher whose age is below [MIN_ADULT_AGE]
+     * (a minor) only sees other minor profiles; a searcher at or above
+     * [MIN_ADULT_AGE] only sees adult profiles. This prevents cross-cohort
+     * exposure without blocking either age group from the feature. The bracket
+     * boundary is [MIN_ADULT_AGE] (18), following the standard legal definition
+     * of adulthood in the UK, EU and US — the launch markets per the plan.
+     * (docs/product-decisions.md §16+ records this as a known gap; this commit
+     * closes the domain-layer part of it.)
+     *
      * The same algorithm is in lanes/swift-core/Sources/MyFriendsCore/ProfileRepository.swift
      * (constitution P9).
      */
@@ -205,8 +216,16 @@ class ProfileRepository {
         val myInterests = searcher.interests.toSet()
         val myActivities = searcher.activities.toSet()
         val myBlocked = blockedBy[searcher.id] ?: emptySet()
+        val isSearcherMinor = searcher.age < MIN_ADULT_AGE
         return profiles.values
-            .filter { it.openToFriends && it.id != searcher.id && it.id !in myBlocked }
+            .filter {
+                it.openToFriends &&
+                    it.id != searcher.id &&
+                    it.id !in myBlocked &&
+                    // Age-bracket isolation (constitution P3): a minor searcher
+                    // sees only minor candidates; an adult searcher sees only adults.
+                    (it.age < MIN_ADULT_AGE) == isSearcherMinor
+            }
             .map { candidate ->
                 val theirInterests = candidate.interests.toSet()
                 val theirActivities = candidate.activities.toSet()
@@ -429,5 +448,28 @@ class ProfileRepository {
          * (constitution P9).
          */
         const val MIN_AGE: Int = 16
+
+        /**
+         * The age at which a user is considered an adult for discovery
+         * age-bracket isolation purposes.
+         *
+         * Users whose [Profile.age] is below this value are minors (16–17);
+         * users at or above it are adults (18+). Discovery is age-isolated:
+         * minors only see other minors, adults only see other adults. This is
+         * the domain-layer implementation of the "what changes for a minor"
+         * requirement from constitution P3 (enforceable).
+         *
+         * Set to 18, the standard legal adulthood threshold in the UK, EU and
+         * US — the three launch markets named in the plan.
+         *
+         * docs/product-decisions.md §16+ documents this isolation as a known
+         * gap: "under-18 accounts defaulting geolocation and matching-profiling
+         * to off". This constant and the [discover] filter are the
+         * domain-layer part of that closure.
+         *
+         * The same constant is declared in the Swift lane as `minAdultAge`
+         * (constitution P9).
+         */
+        const val MIN_ADULT_AGE: Int = 18
     }
 }
