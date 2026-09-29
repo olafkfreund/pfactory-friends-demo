@@ -487,6 +487,100 @@ class ProfileRepositoryTest {
         assertNull(repository.find("user-1"))
     }
 
+    // AC#2: open-to-friends toggle
+
+    @Test
+    fun `a freshly saved profile has openToFriends false by default`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertFalse(repository.find("user-1")?.openToFriends == true)
+    }
+
+    @Test
+    fun `setOpenToFriends true marks the profile as open and returns true`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertTrue(repository.setOpenToFriends("user-1", true))
+        assertTrue(repository.find("user-1")?.openToFriends == true)
+    }
+
+    @Test
+    fun `setOpenToFriends false marks the profile as closed and returns true`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), openToFriends = true))
+
+        assertTrue(repository.setOpenToFriends("user-1", false))
+        assertFalse(repository.find("user-1")?.openToFriends == true)
+    }
+
+    @Test
+    fun `setOpenToFriends on an unknown id returns false without throwing`() {
+        val repository = ProfileRepository()
+
+        assertFalse(repository.setOpenToFriends("never-saved", true))
+    }
+
+    @Test
+    fun `findOpen returns only profiles with openToFriends true`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+        repository.setOpenToFriends("user-1", true)
+
+        val open = repository.findOpen()
+        assertEquals(1, open.size)
+        assertEquals("user-1", open.first().id)
+    }
+
+    @Test
+    fun `findOpen excludes a profile after its flag is turned off`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.setOpenToFriends("user-1", true)
+
+        assertTrue(repository.findOpen().any { it.id == "user-1" })
+
+        repository.setOpenToFriends("user-1", false)
+
+        assertTrue(repository.findOpen().none { it.id == "user-1" })
+    }
+
+    @Test
+    fun `findOpen returns an empty list when no profiles are open`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertEquals(emptyList(), repository.findOpen())
+    }
+
+    @Test
+    fun `a profile saved with openToFriends true appears in findOpen immediately`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), openToFriends = true))
+
+        val open = repository.findOpen()
+        assertEquals(1, open.size)
+        assertEquals("user-1", open.first().id)
+    }
+
+    @Test
+    fun `findOpen returns all open profiles when multiple exist`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+        repository.save(Profile(id = "user-3", displayName = "Alan Turing", photo = validPhoto()))
+        repository.setOpenToFriends("user-1", true)
+        repository.setOpenToFriends("user-2", true)
+
+        val open = repository.findOpen()
+        assertEquals(2, open.size)
+        assertTrue(open.any { it.id == "user-1" })
+        assertTrue(open.any { it.id == "user-2" })
+        assertTrue(open.none { it.id == "user-3" })
+    }
+
     @Test
     fun `an at-limit activities list is accepted alongside an over-limit interests list being rejected`() {
         // AC-PROF-021-01: the mirror case — a list at the activities limit does
