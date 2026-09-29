@@ -133,6 +133,48 @@ class ProfileRepository {
         )
     }
 
+    /**
+     * Returns all open profiles as [DiscoveryResult]s, sorted by [MatchScore]
+     * descending, excluding the searcher themselves.
+     *
+     * AC#4: discovery results are ordered by the match score computed from
+     * shared interest tags and overlapping activities. Each result also carries
+     * the shared interests and activities that produced the score, so the
+     * caller can show the person why each result was surfaced.
+     *
+     * The searcher does not need [Profile.openToFriends] set: they are
+     * browsing, not being browsed. Only the candidates need the flag.
+     *
+     * Profiles with equal scores preserve stable insertion order
+     * (`sortedByDescending` is a stable sort in Kotlin).
+     *
+     * The same algorithm is in lanes/swift-core/Sources/MyFriendsCore/ProfileRepository.swift
+     * (constitution P9).
+     */
+    fun discover(searcher: Profile): List<DiscoveryResult> {
+        val myInterests = searcher.interests.toSet()
+        val myActivities = searcher.activities.toSet()
+        return profiles.values
+            .filter { it.openToFriends && it.id != searcher.id }
+            .map { candidate ->
+                val theirInterests = candidate.interests.toSet()
+                val theirActivities = candidate.activities.toSet()
+                val score = MatchScore.score(
+                    myInterests = myInterests,
+                    theirInterests = theirInterests,
+                    myAvailability = myActivities,
+                    theirAvailability = theirActivities,
+                )
+                DiscoveryResult(
+                    profile = candidate,
+                    score = score,
+                    sharedInterests = myInterests.intersect(theirInterests).sorted(),
+                    sharedActivities = myActivities.intersect(theirActivities).sorted(),
+                )
+            }
+            .sortedByDescending { it.score }
+    }
+
     /** Returns the stored [Profile] for [id], or null if none exists. */
     fun find(id: String): Profile? = profiles[id]
 

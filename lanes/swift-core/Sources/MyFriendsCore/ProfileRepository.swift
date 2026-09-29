@@ -148,6 +148,46 @@ public final class ProfileRepository {
         )
     }
 
+    /// Returns all open profiles as `DiscoveryResult`s, sorted by `MatchScore`
+    /// descending, excluding the searcher themselves.
+    ///
+    /// AC#4: discovery results are ordered by the match score computed from
+    /// shared interest tags and overlapping activities. Each result also carries
+    /// the shared interests and activities that produced the score, so the
+    /// caller can show the person why each result was surfaced.
+    ///
+    /// The searcher does not need `openToFriends` set: they are browsing,
+    /// not being browsed. Only the candidates need the flag.
+    ///
+    /// Profiles with equal scores preserve stable relative ordering (Swift's
+    /// `sorted(by:)` is a stable sort since Swift 5).
+    ///
+    /// The same algorithm is in
+    /// lanes/kotlin-core/src/main/kotlin/ProfileRepository.kt (constitution P9).
+    public func discover(searcher: Profile) -> [DiscoveryResult] {
+        let myInterests = Set(searcher.interests)
+        let myActivities = Set(searcher.activities)
+        return profiles.values
+            .filter { $0.openToFriends && $0.id != searcher.id }
+            .map { candidate -> DiscoveryResult in
+                let theirInterests = Set(candidate.interests)
+                let theirActivities = Set(candidate.activities)
+                let score = MatchScore.score(
+                    myInterests: myInterests,
+                    theirInterests: theirInterests,
+                    myAvailability: myActivities,
+                    theirAvailability: theirActivities
+                )
+                return DiscoveryResult(
+                    profile: candidate,
+                    score: score,
+                    sharedInterests: myInterests.intersection(theirInterests).sorted(),
+                    sharedActivities: myActivities.intersection(theirActivities).sorted()
+                )
+            }
+            .sorted { $0.score > $1.score }
+    }
+
     /// Returns the stored `Profile` for `id`, or nil if none exists.
     public func find(id: String) -> Profile? {
         return profiles[id]
