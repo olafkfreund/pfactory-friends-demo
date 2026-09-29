@@ -19,7 +19,6 @@ import kotlin.test.assertTrue
  * [MyfriendsSharedCoreRemediatedV3E2ETest].
  */
 class MyfriendsSharedCoreRemediatedV3IntegrationTest {
-
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private fun photo() = ProfilePhoto(bytes = byteArrayOf(1, 2, 3), format = "png")
@@ -33,16 +32,17 @@ class MyfriendsSharedCoreRemediatedV3IntegrationTest {
         activities: List<String> = emptyList(),
         location: GeoLocation? = null,
     ): Profile {
-        val profile = Profile(
-            id = id,
-            displayName = "User $id",
-            photo = photo(),
-            age = age,
-            openToFriends = openToFriends,
-            interests = interests,
-            activities = activities,
-            location = location,
-        )
+        val profile =
+            Profile(
+                id = id,
+                displayName = "User $id",
+                photo = photo(),
+                age = age,
+                openToFriends = openToFriends,
+                interests = interests,
+                activities = activities,
+                location = location,
+            )
         repo.save(profile)
         return profile
     }
@@ -65,16 +65,22 @@ class MyfriendsSharedCoreRemediatedV3IntegrationTest {
         val searcher = saveProfile(repo, "searcher", interests = listOf("jazz", "climbing"), activities = listOf("weekends"))
 
         // grace: interests overlap fully (1.0), availability matches (1.0) → combined 1.0
-        saveProfile(repo, "grace",
+        saveProfile(
+            repo,
+            "grace",
             openToFriends = true,
             interests = listOf("jazz", "climbing"),
-            activities = listOf("weekends"))
+            activities = listOf("weekends"),
+        )
 
         // ada: interests half-match (0.5), no availability overlap (0.0) → combined 0.25
-        saveProfile(repo, "ada",
+        saveProfile(
+            repo,
+            "ada",
             openToFriends = true,
             interests = listOf("jazz"),
-            activities = listOf("mornings"))
+            activities = listOf("mornings"),
+        )
 
         // closed: not open
         saveProfile(repo, "closed", openToFriends = false, interests = listOf("jazz", "climbing"))
@@ -244,18 +250,20 @@ class MyfriendsSharedCoreRemediatedV3IntegrationTest {
             messaging.sendConnectionRequest(requesterId = "alice", recipientId = "user-$i")
         }
         // Alice's next request is refused.
-        val aliceResult = messaging.sendConnectionRequestResult(
-            requesterId = "alice",
-            recipientId = "user-${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1}",
-        )
+        val aliceResult =
+            messaging.sendConnectionRequestResult(
+                requesterId = "alice",
+                recipientId = "user-${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1}",
+            )
         assertTrue(aliceResult is ConnectionRequestResult.Refused)
         assertEquals(ConnectionRequestRefusal.RATE_LIMIT_EXCEEDED, aliceResult.reason)
 
         // Carol's limit is independent — she can still send.
-        val carolResult = messaging.sendConnectionRequestResult(
-            requesterId = "carol",
-            recipientId = "user-${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1}",
-        )
+        val carolResult =
+            messaging.sendConnectionRequestResult(
+                requesterId = "carol",
+                recipientId = "user-${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1}",
+            )
         assertTrue(carolResult is ConnectionRequestResult.Allowed)
     }
 
@@ -271,13 +279,14 @@ class MyfriendsSharedCoreRemediatedV3IntegrationTest {
         val reportRepo = ReportRepository()
 
         // Alice can still report Bob.
-        val report = reportRepo.submitReport(
-            reporterId = "alice",
-            targetId = "bob",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.HARASSMENT,
-            additionalText = "Bob has been harassing me.",
-        )
+        val report =
+            reportRepo.submitReport(
+                reporterId = "alice",
+                targetId = "bob",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.HARASSMENT,
+                additionalText = "Bob has been harassing me.",
+            )
 
         assertNotNull(report)
         val reports = reportRepo.getReportsAgainst("bob")
@@ -358,13 +367,14 @@ class MyfriendsSharedCoreRemediatedV3IntegrationTest {
     fun `AC12 after a radius-based discover call the searcher's location is not available from any read`() {
         val profileRepo = ProfileRepository()
         val searcherLocation = GeoLocation(lat = 51.500, lon = -0.100)
-        val searcher = Profile(
-            id = "searcher",
-            displayName = "Searcher",
-            photo = photo(),
-            age = 25,
-            location = null,
-        )
+        val searcher =
+            Profile(
+                id = "searcher",
+                displayName = "Searcher",
+                photo = photo(),
+                age = 25,
+                location = null,
+            )
         profileRepo.save(
             Profile(
                 id = "nearby",
@@ -435,12 +445,13 @@ class MyfriendsSharedCoreRemediatedV3IntegrationTest {
         val repo = ReportRepository()
 
         for (reason in ReportReason.entries) {
-            val report = repo.submitReport(
-                reporterId = "alice",
-                targetId = "target-${reason.name}",
-                targetKind = ReportTargetKind.USER,
-                reason = reason,
-            )
+            val report =
+                repo.submitReport(
+                    reporterId = "alice",
+                    targetId = "target-${reason.name}",
+                    targetKind = ReportTargetKind.USER,
+                    reason = reason,
+                )
             assertNotNull(report, "report with reason $reason must be accepted")
         }
 
@@ -472,9 +483,10 @@ class MyfriendsSharedCoreRemediatedV3IntegrationTest {
         saveProfile(profileRepo, "alice", interests = listOf("jazz"))
         saveProfile(profileRepo, "bob", openToFriends = true, interests = listOf("jazz"))
 
-        val discoveryResults = profileRepo.discover(
-            Profile(id = "alice", displayName = "Alice", photo = photo(), interests = listOf("jazz")),
-        )
+        val discoveryResults =
+            profileRepo.discover(
+                Profile(id = "alice", displayName = "Alice", photo = photo(), interests = listOf("jazz")),
+            )
         assertFalse(discoveryResults.isEmpty())
 
         val messaging = MessagingRepository(profileRepo)
@@ -486,13 +498,14 @@ class MyfriendsSharedCoreRemediatedV3IntegrationTest {
         assertNotNull(message)
 
         val reportRepo = ReportRepository()
-        val report = reportRepo.submitReport(
-            reporterId = "alice",
-            targetId = "bob",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.OTHER,
-            additionalText = "Something happened.",
-        )
+        val report =
+            reportRepo.submitReport(
+                reporterId = "alice",
+                targetId = "bob",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.OTHER,
+                additionalText = "Something happened.",
+            )
         assertNotNull(report)
     }
 }

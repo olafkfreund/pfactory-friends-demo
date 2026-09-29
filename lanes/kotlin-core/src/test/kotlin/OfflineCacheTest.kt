@@ -11,30 +11,40 @@ import kotlin.test.assertTrue
  * is no network connection.
  */
 class OfflineCacheTest {
+    private fun validProfile(id: String = "alice") =
+        Profile(
+            id = id,
+            displayName = "Alice",
+        )
 
-    private fun validProfile(id: String = "alice") = Profile(
+    private fun acceptedConnection(
+        id: String,
+        requesterId: String,
+        recipientId: String,
+    ) = Connection(
         id = id,
-        displayName = "Alice",
+        requesterId = requesterId,
+        recipientId = recipientId,
+        status = ConnectionStatus.ACCEPTED,
     )
 
-    private fun acceptedConnection(id: String, requesterId: String, recipientId: String) =
-        Connection(
-            id = id,
-            requesterId = requesterId,
-            recipientId = recipientId,
-            status = ConnectionStatus.ACCEPTED,
-        )
+    private fun pendingConnection(
+        id: String,
+        requesterId: String,
+        recipientId: String,
+    ) = Connection(
+        id = id,
+        requesterId = requesterId,
+        recipientId = recipientId,
+        status = ConnectionStatus.PENDING,
+    )
 
-    private fun pendingConnection(id: String, requesterId: String, recipientId: String) =
-        Connection(
-            id = id,
-            requesterId = requesterId,
-            recipientId = recipientId,
-            status = ConnectionStatus.PENDING,
-        )
-
-    private fun message(id: String, from: String, to: String, body: String = "hello") =
-        Message(id = id, senderId = from, recipientId = to, body = body)
+    private fun message(
+        id: String,
+        from: String,
+        to: String,
+        body: String = "hello",
+    ) = Message(id = id, senderId = from, recipientId = to, body = body)
 
     // ── cacheProfile ──────────────────────────────────────────────────────
 
@@ -113,7 +123,7 @@ class OfflineCacheTest {
         val cache = OfflineCache()
 
         assertFalse(
-            cache.cacheConnections("  ", listOf(acceptedConnection("c1", "alice", "bob")))
+            cache.cacheConnections("  ", listOf(acceptedConnection("c1", "alice", "bob"))),
         )
         assertTrue(cache.getCachedConnections("  ").isEmpty())
     }
@@ -166,7 +176,7 @@ class OfflineCacheTest {
         val cache = OfflineCache()
 
         assertFalse(
-            cache.cacheMessages("  ", "bob", listOf(message("m1", "alice", "bob")))
+            cache.cacheMessages("  ", "bob", listOf(message("m1", "alice", "bob"))),
         )
         assertTrue(cache.getCachedMessages("  ", "bob").isEmpty())
     }
@@ -176,7 +186,7 @@ class OfflineCacheTest {
         val cache = OfflineCache()
 
         assertFalse(
-            cache.cacheMessages("alice", "  ", listOf(message("m1", "alice", "bob")))
+            cache.cacheMessages("alice", "  ", listOf(message("m1", "alice", "bob"))),
         )
         assertTrue(cache.getCachedMessages("alice", "  ").isEmpty())
     }

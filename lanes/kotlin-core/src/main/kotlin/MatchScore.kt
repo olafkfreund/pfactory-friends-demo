@@ -19,7 +19,10 @@ object MatchScore {
      * Interest-only score: the fraction of [mine] that [theirs] also contains.
      * Returns 0.0 when [mine] is empty rather than dividing by zero.
      */
-    fun score(mine: Set<String>, theirs: Set<String>): Double {
+    fun score(
+        mine: Set<String>,
+        theirs: Set<String>,
+    ): Double {
         if (mine.isEmpty()) return 0.0
         return mine.intersect(theirs).size.toDouble() / mine.size
     }

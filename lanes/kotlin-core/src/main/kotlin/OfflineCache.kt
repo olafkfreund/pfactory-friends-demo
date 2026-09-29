@@ -21,7 +21,6 @@
  * (OfflineCache.swift) so that both platforms share one set of rules.
  */
 class OfflineCache {
-
     // Profile snapshot keyed by user id.
     private val profileSnapshots: MutableMap<String, Profile> = mutableMapOf()
 
@@ -50,8 +49,7 @@ class OfflineCache {
      * Returns the most recently cached profile snapshot for [userId], or
      * `null` when no snapshot has been stored for that id.
      */
-    fun getCachedProfile(userId: String): Profile? =
-        profileSnapshots[userId]
+    fun getCachedProfile(userId: String): Profile? = profileSnapshots[userId]
 
     // ── Connections ───────────────────────────────────────────────────────
 
@@ -66,7 +64,10 @@ class OfflineCache {
      * Returns `false` and stores nothing when [userId] is blank or
      * whitespace-only.
      */
-    fun cacheConnections(userId: String, connections: List<Connection>): Boolean {
+    fun cacheConnections(
+        userId: String,
+        connections: List<Connection>,
+    ): Boolean {
         if (userId.isBlank()) return false
         connectionSnapshots[userId] = connections.filter { it.status == ConnectionStatus.ACCEPTED }
         return true
@@ -76,8 +77,7 @@ class OfflineCache {
      * Returns the cached accepted-connection list for [userId], or an empty
      * list when no snapshot has been stored for that id.
      */
-    fun getCachedConnections(userId: String): List<Connection> =
-        connectionSnapshots[userId] ?: emptyList()
+    fun getCachedConnections(userId: String): List<Connection> = connectionSnapshots[userId] ?: emptyList()
 
     // ── Messages ──────────────────────────────────────────────────────────
 
@@ -88,7 +88,11 @@ class OfflineCache {
      * Returns `false` and stores nothing when [userId] or [peerId] is blank
      * or whitespace-only.
      */
-    fun cacheMessages(userId: String, peerId: String, messages: List<Message>): Boolean {
+    fun cacheMessages(
+        userId: String,
+        peerId: String,
+        messages: List<Message>,
+    ): Boolean {
         if (userId.isBlank() || peerId.isBlank()) return false
         messageSnapshots[pairKey(userId, peerId)] = messages
         return true
@@ -102,8 +106,10 @@ class OfflineCache {
      * The lookup is symmetric: `getCachedMessages("a", "b")` and
      * `getCachedMessages("b", "a")` return the same list.
      */
-    fun getCachedMessages(userId: String, peerId: String): List<Message> =
-        messageSnapshots[pairKey(userId, peerId)] ?: emptyList()
+    fun getCachedMessages(
+        userId: String,
+        peerId: String,
+    ): List<Message> = messageSnapshots[pairKey(userId, peerId)] ?: emptyList()
 
     // ── Account deletion ──────────────────────────────────────────────────
 
@@ -119,8 +125,9 @@ class OfflineCache {
     fun clearForUser(userId: String) {
         profileSnapshots.remove(userId)
         connectionSnapshots.remove(userId)
-        val keysToRemove = messageSnapshots.keys
-            .filter { key -> key.startsWith("$userId|") || key.endsWith("|$userId") }
+        val keysToRemove =
+            messageSnapshots.keys
+                .filter { key -> key.startsWith("$userId|") || key.endsWith("|$userId") }
         keysToRemove.forEach { key -> messageSnapshots.remove(key) }
     }
 
@@ -133,7 +140,10 @@ class OfflineCache {
      * Both ids are sorted lexicographically so that
      * `pairKey("a", "b") == pairKey("b", "a")`.
      */
-    private fun pairKey(a: String, b: String): String {
+    private fun pairKey(
+        a: String,
+        b: String,
+    ): String {
         val (first, second) = if (a <= b) Pair(a, b) else Pair(b, a)
         return "$first|$second"
     }

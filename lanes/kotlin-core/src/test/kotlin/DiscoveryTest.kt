@@ -1,10 +1,8 @@
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DiscoveryTest {
-
     private fun validPhoto(
         bytes: ByteArray = byteArrayOf(1, 2, 3, 4),
         format: String = "png",
@@ -17,12 +15,13 @@ class DiscoveryTest {
         // Searcher has jazz + climbing. Ada shares jazz (score 0.5),
         // Grace shares jazz + climbing (score 1.0). Grace must come first.
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "searcher",
-            displayName = "Searcher",
-            photo = validPhoto(),
-            interests = listOf("jazz", "climbing"),
-        )
+        val searcher =
+            Profile(
+                id = "searcher",
+                displayName = "Searcher",
+                photo = validPhoto(),
+                interests = listOf("jazz", "climbing"),
+            )
         repository.save(
             Profile(
                 id = "ada",
@@ -54,13 +53,14 @@ class DiscoveryTest {
     @Test
     fun `discover excludes the searcher even when they have openToFriends true`() {
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "searcher",
-            displayName = "Searcher",
-            photo = validPhoto(),
-            interests = listOf("jazz"),
-            openToFriends = true,
-        )
+        val searcher =
+            Profile(
+                id = "searcher",
+                displayName = "Searcher",
+                photo = validPhoto(),
+                interests = listOf("jazz"),
+                openToFriends = true,
+            )
         repository.save(searcher)
         repository.save(
             Profile(
@@ -82,12 +82,13 @@ class DiscoveryTest {
     @Test
     fun `discover excludes profiles with openToFriends false`() {
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "searcher",
-            displayName = "Searcher",
-            photo = validPhoto(),
-            interests = listOf("jazz"),
-        )
+        val searcher =
+            Profile(
+                id = "searcher",
+                displayName = "Searcher",
+                photo = validPhoto(),
+                interests = listOf("jazz"),
+            )
         repository.save(
             Profile(
                 id = "closed",
@@ -106,11 +107,12 @@ class DiscoveryTest {
     @Test
     fun `discover returns an empty list when no open profiles exist`() {
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "searcher",
-            displayName = "Searcher",
-            photo = validPhoto(),
-        )
+        val searcher =
+            Profile(
+                id = "searcher",
+                displayName = "Searcher",
+                photo = validPhoto(),
+            )
 
         val results = repository.discover(searcher)
 
@@ -122,12 +124,13 @@ class DiscoveryTest {
     @Test
     fun `discover populates sharedInterests with the sorted intersection of interest tags`() {
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "searcher",
-            displayName = "Searcher",
-            photo = validPhoto(),
-            interests = listOf("jazz", "climbing", "chess"),
-        )
+        val searcher =
+            Profile(
+                id = "searcher",
+                displayName = "Searcher",
+                photo = validPhoto(),
+                interests = listOf("jazz", "climbing", "chess"),
+            )
         repository.save(
             Profile(
                 id = "ada",
@@ -147,12 +150,13 @@ class DiscoveryTest {
     @Test
     fun `discover populates sharedActivities with the sorted intersection of activity tags`() {
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "searcher",
-            displayName = "Searcher",
-            photo = validPhoto(),
-            activities = listOf("weekends", "weekday-evenings"),
-        )
+        val searcher =
+            Profile(
+                id = "searcher",
+                displayName = "Searcher",
+                photo = validPhoto(),
+                activities = listOf("weekends", "weekday-evenings"),
+            )
         repository.save(
             Profile(
                 id = "ada",
@@ -171,13 +175,14 @@ class DiscoveryTest {
     @Test
     fun `discover returns empty sharedInterests and sharedActivities when there is no overlap`() {
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "searcher",
-            displayName = "Searcher",
-            photo = validPhoto(),
-            interests = listOf("jazz"),
-            activities = listOf("weekends"),
-        )
+        val searcher =
+            Profile(
+                id = "searcher",
+                displayName = "Searcher",
+                photo = validPhoto(),
+                interests = listOf("jazz"),
+                activities = listOf("weekends"),
+            )
         repository.save(
             Profile(
                 id = "ada",
@@ -199,11 +204,12 @@ class DiscoveryTest {
     @Test
     fun `discover with empty searcher interests still returns open profiles with score zero`() {
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "searcher",
-            displayName = "Searcher",
-            photo = validPhoto(),
-        )
+        val searcher =
+            Profile(
+                id = "searcher",
+                displayName = "Searcher",
+                photo = validPhoto(),
+            )
         repository.save(
             Profile(
                 id = "ada",
@@ -226,13 +232,14 @@ class DiscoveryTest {
         // activities: mine={weekday-evenings}, theirs={weekday-evenings} => 1/1 = 1.0
         // combined = (0.5 + 1.0) / 2 = 0.75
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "searcher",
-            displayName = "Searcher",
-            photo = validPhoto(),
-            interests = listOf("jazz", "climbing"),
-            activities = listOf("weekday-evenings"),
-        )
+        val searcher =
+            Profile(
+                id = "searcher",
+                displayName = "Searcher",
+                photo = validPhoto(),
+                interests = listOf("jazz", "climbing"),
+                activities = listOf("weekday-evenings"),
+            )
         repository.save(
             Profile(
                 id = "ada",
@@ -253,13 +260,14 @@ class DiscoveryTest {
     fun `discover searcher without openToFriends can still browse open profiles`() {
         // The searcher does not need openToFriends=true to browse.
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "searcher",
-            displayName = "Searcher",
-            photo = validPhoto(),
-            interests = listOf("jazz"),
-            openToFriends = false,
-        )
+        val searcher =
+            Profile(
+                id = "searcher",
+                displayName = "Searcher",
+                photo = validPhoto(),
+                interests = listOf("jazz"),
+                openToFriends = false,
+            )
         repository.save(
             Profile(
                 id = "ada",
@@ -302,7 +310,7 @@ class DiscoveryTest {
                 displayName = "Ada Lovelace",
                 photo = validPhoto(),
                 openToFriends = true,
-                location = locationAt(0.005),   // ~0.56 km
+                location = locationAt(0.005), // ~0.56 km
             ),
         )
         repository.save(
@@ -311,7 +319,7 @@ class DiscoveryTest {
                 displayName = "Grace Hopper",
                 photo = validPhoto(),
                 openToFriends = true,
-                location = locationAt(0.040),   // ~4.45 km
+                location = locationAt(0.040), // ~4.45 km
             ),
         )
 
@@ -355,8 +363,8 @@ class DiscoveryTest {
                 id = "closed",
                 displayName = "Closed Profile",
                 photo = validPhoto(),
-                openToFriends = false,          // flag is off
-                location = locationAt(0.005),   // well within any radius
+                openToFriends = false, // flag is off
+                location = locationAt(0.005), // well within any radius
             ),
         )
 
@@ -369,12 +377,13 @@ class DiscoveryTest {
     fun `discover with radius results are ordered by score descending`() {
         // Two profiles within the radius; higher-scoring one must come first.
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "searcher",
-            displayName = "Searcher",
-            photo = validPhoto(),
-            interests = listOf("jazz", "climbing"),
-        )
+        val searcher =
+            Profile(
+                id = "searcher",
+                displayName = "Searcher",
+                photo = validPhoto(),
+                interests = listOf("jazz", "climbing"),
+            )
         // grace shares both interests → score 1.0
         repository.save(
             Profile(
@@ -383,7 +392,7 @@ class DiscoveryTest {
                 photo = validPhoto(),
                 interests = listOf("jazz", "climbing"),
                 openToFriends = true,
-                location = locationAt(0.005),   // ~0.56 km
+                location = locationAt(0.005), // ~0.56 km
             ),
         )
         // ada shares only jazz → score 0.5
@@ -394,7 +403,7 @@ class DiscoveryTest {
                 photo = validPhoto(),
                 interests = listOf("jazz"),
                 openToFriends = true,
-                location = locationAt(0.040),   // ~4.45 km
+                location = locationAt(0.040), // ~4.45 km
             ),
         )
 
@@ -437,13 +446,14 @@ class DiscoveryTest {
         // minors (age < MIN_ADULT_AGE) are never surfaced to adults and vice
         // versa.
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "minor-searcher",
-            displayName = "Minor Searcher",
-            photo = validPhoto(),
-            age = 17,
-            interests = listOf("jazz"),
-        )
+        val searcher =
+            Profile(
+                id = "minor-searcher",
+                displayName = "Minor Searcher",
+                photo = validPhoto(),
+                age = 17,
+                interests = listOf("jazz"),
+            )
         repository.save(
             Profile(
                 id = "adult",
@@ -464,13 +474,14 @@ class DiscoveryTest {
     fun `discover excludes minor candidates from an adult searcher`() {
         // An 18-year-old searcher must not see under-18 profiles in their results.
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "adult-searcher",
-            displayName = "Adult Searcher",
-            photo = validPhoto(),
-            age = ProfileRepository.MIN_ADULT_AGE,
-            interests = listOf("jazz"),
-        )
+        val searcher =
+            Profile(
+                id = "adult-searcher",
+                displayName = "Adult Searcher",
+                photo = validPhoto(),
+                age = ProfileRepository.MIN_ADULT_AGE,
+                interests = listOf("jazz"),
+            )
         repository.save(
             Profile(
                 id = "minor",
@@ -491,13 +502,14 @@ class DiscoveryTest {
     fun `discover shows minor candidates to a minor searcher`() {
         // A 16-year-old sees other under-18 profiles (both are minors).
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "minor-16",
-            displayName = "Minor 16",
-            photo = validPhoto(),
-            age = 16,
-            interests = listOf("jazz"),
-        )
+        val searcher =
+            Profile(
+                id = "minor-16",
+                displayName = "Minor 16",
+                photo = validPhoto(),
+                age = 16,
+                interests = listOf("jazz"),
+            )
         repository.save(
             Profile(
                 id = "minor-17",
@@ -519,13 +531,14 @@ class DiscoveryTest {
     fun `discover shows adult candidates to an adult searcher`() {
         // An 18-year-old sees other 18+ profiles (both are adults).
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "adult-18",
-            displayName = "Adult 18",
-            photo = validPhoto(),
-            age = ProfileRepository.MIN_ADULT_AGE,
-            interests = listOf("jazz"),
-        )
+        val searcher =
+            Profile(
+                id = "adult-18",
+                displayName = "Adult 18",
+                photo = validPhoto(),
+                age = ProfileRepository.MIN_ADULT_AGE,
+                interests = listOf("jazz"),
+            )
         repository.save(
             Profile(
                 id = "adult-25",
@@ -555,12 +568,13 @@ class DiscoveryTest {
         // (DiscoveryTests.testDiscoverWithRadiusAppliesAgeBracketIsolation),
         // per constitution P9.
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "minor-searcher",
-            displayName = "Minor Searcher",
-            photo = validPhoto(),
-            age = 17,
-        )
+        val searcher =
+            Profile(
+                id = "minor-searcher",
+                displayName = "Minor Searcher",
+                photo = validPhoto(),
+                age = 17,
+            )
         // An adult candidate nearby: inside the radius but wrong age bracket.
         repository.save(
             Profile(
@@ -569,7 +583,7 @@ class DiscoveryTest {
                 photo = validPhoto(),
                 age = ProfileRepository.MIN_ADULT_AGE,
                 openToFriends = true,
-                location = locationAt(0.005),   // ~0.56 km — well within 25 km
+                location = locationAt(0.005), // ~0.56 km — well within 25 km
             ),
         )
         // A minor candidate nearby: inside the radius and the correct age bracket.
@@ -580,7 +594,7 @@ class DiscoveryTest {
                 photo = validPhoto(),
                 age = 16,
                 openToFriends = true,
-                location = locationAt(0.005),   // ~0.56 km — well within 25 km
+                location = locationAt(0.005), // ~0.56 km — well within 25 km
             ),
         )
 
@@ -613,7 +627,7 @@ class DiscoveryTest {
                 displayName = "Blocked Nearby",
                 photo = validPhoto(),
                 openToFriends = true,
-                location = locationAt(0.005),   // ~0.56 km — well within 25 km
+                location = locationAt(0.005), // ~0.56 km — well within 25 km
             ),
         )
         repository.blockUser(blockerId = "searcher", blockedId = "blocked-nearby")
@@ -624,7 +638,7 @@ class DiscoveryTest {
                 displayName = "Unblocked Nearby",
                 photo = validPhoto(),
                 openToFriends = true,
-                location = locationAt(0.005),   // ~0.56 km — well within 25 km
+                location = locationAt(0.005), // ~0.56 km — well within 25 km
             ),
         )
 

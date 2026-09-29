@@ -1,4 +1,7 @@
-import kotlin.math.*
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * A WGS-84 geographic coordinate pair (latitude/longitude in decimal degrees).
@@ -13,8 +16,10 @@ import kotlin.math.*
  * that both platforms share one model of a geographic location (constitution
  * P9).
  */
-data class GeoLocation(val lat: Double, val lon: Double) {
-
+data class GeoLocation(
+    val lat: Double,
+    val lon: Double,
+) {
     /**
      * Returns the great-circle distance in kilometres between this location
      * and [other] using the haversine formula.
@@ -29,8 +34,9 @@ data class GeoLocation(val lat: Double, val lon: Double) {
         val dLon = Math.toRadians(other.lon - lon)
         val sinHalfDLat = sin(dLat / 2)
         val sinHalfDLon = sin(dLon / 2)
-        val a = sinHalfDLat * sinHalfDLat +
-            cos(lat1) * cos(lat2) * sinHalfDLon * sinHalfDLon
+        val a =
+            sinHalfDLat * sinHalfDLat +
+                cos(lat1) * cos(lat2) * sinHalfDLon * sinHalfDLon
         val c = 2 * atan2(sqrt(a), sqrt(1 - a))
         return EARTH_RADIUS_KM * c
     }
@@ -50,7 +56,9 @@ data class GeoLocation(val lat: Double, val lon: Double) {
  * The same values exist verbatim in the Swift lane (GeoLocation.swift) so
  * that both platforms enforce one shared set of choices (constitution P9).
  */
-enum class SearchRadius(val kilometres: Double) {
+enum class SearchRadius(
+    val kilometres: Double,
+) {
     ONE(1.0),
     FIVE(5.0),
     TEN(10.0),

@@ -6,7 +6,6 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class MessagingTest {
-
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private fun validPhoto(): ProfilePhoto = ProfilePhoto(bytes = byteArrayOf(1, 2, 3), format = "png")
@@ -425,10 +424,11 @@ class MessagingTest {
             messaging.sendConnectionRequest(requesterId = "alice", recipientId = "user-$i")
         }
 
-        val result = messaging.sendConnectionRequestResult(
-            requesterId = "alice",
-            recipientId = "user-${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1}",
-        )
+        val result =
+            messaging.sendConnectionRequestResult(
+                requesterId = "alice",
+                recipientId = "user-${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1}",
+            )
 
         assertTrue(result is ConnectionRequestResult.Refused)
         assertEquals(ConnectionRequestRefusal.RATE_LIMIT_EXCEEDED, result.reason)

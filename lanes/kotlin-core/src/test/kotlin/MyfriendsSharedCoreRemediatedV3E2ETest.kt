@@ -18,7 +18,6 @@ import kotlin.test.assertTrue
  * threads (AC#19). All assertions are synchronous.
  */
 class MyfriendsSharedCoreRemediatedV3E2ETest {
-
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private fun photo() = ProfilePhoto(bytes = byteArrayOf(9, 8, 7), format = "jpeg")
@@ -33,16 +32,17 @@ class MyfriendsSharedCoreRemediatedV3E2ETest {
         activities: List<String> = emptyList(),
         location: GeoLocation? = null,
     ): Profile {
-        val profile = Profile(
-            id = id,
-            displayName = "User $id",
-            photo = photo(),
-            age = age,
-            openToFriends = openToFriends,
-            interests = interests,
-            activities = activities,
-            location = location,
-        )
+        val profile =
+            Profile(
+                id = id,
+                displayName = "User $id",
+                photo = photo(),
+                age = age,
+                openToFriends = openToFriends,
+                interests = interests,
+                activities = activities,
+                location = location,
+            )
         profileRepo.save(profile)
         return profile
     }
@@ -70,10 +70,13 @@ class MyfriendsSharedCoreRemediatedV3E2ETest {
 
         // Two users create profiles.
         saveProfile(profileRepo, "alice", interests = listOf("jazz", "hiking"), activities = listOf("weekends"))
-        saveProfile(profileRepo, "bob",
+        saveProfile(
+            profileRepo,
+            "bob",
             openToFriends = true,
             interests = listOf("jazz", "climbing"),
-            activities = listOf("weekends"))
+            activities = listOf("weekends"),
+        )
 
         // Alice searches for friends.
         val aliceProfile = profileRepo.find("alice")!!
@@ -98,9 +101,10 @@ class MyfriendsSharedCoreRemediatedV3E2ETest {
         val profileRepo = ProfileRepository()
 
         // A user aged 15 tries to sign up — refused (AC#4).
-        val error = assertFailsWith<IllegalArgumentException> {
-            saveProfile(profileRepo, "too-young", age = 15)
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                saveProfile(profileRepo, "too-young", age = 15)
+            }
         assertTrue(
             error.message?.contains(ProfileRepository.MIN_AGE.toString()) == true ||
                 error.message?.contains("age") == true,
@@ -183,10 +187,11 @@ class MyfriendsSharedCoreRemediatedV3E2ETest {
 
         // Send exactly MAX requests — all succeed.
         for (i in 1..MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY) {
-            val result = messaging.sendConnectionRequestResult(
-                requesterId = "requester",
-                recipientId = "recipient-$i",
-            )
+            val result =
+                messaging.sendConnectionRequestResult(
+                    requesterId = "requester",
+                    recipientId = "recipient-$i",
+                )
             assertTrue(
                 result is ConnectionRequestResult.Allowed,
                 "request $i of ${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY} must succeed",
@@ -194,10 +199,11 @@ class MyfriendsSharedCoreRemediatedV3E2ETest {
         }
 
         // The next request — one over the limit — is refused.
-        val overLimit = messaging.sendConnectionRequestResult(
-            requesterId = "requester",
-            recipientId = "recipient-${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1}",
-        )
+        val overLimit =
+            messaging.sendConnectionRequestResult(
+                requesterId = "requester",
+                recipientId = "recipient-${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1}",
+            )
         assertTrue(overLimit is ConnectionRequestResult.Refused)
         assertEquals(ConnectionRequestRefusal.RATE_LIMIT_EXCEEDED, overLimit.reason)
     }
@@ -216,13 +222,14 @@ class MyfriendsSharedCoreRemediatedV3E2ETest {
         val reportRepo = ReportRepository()
 
         // Alice reports Bob for harassment.
-        val report = reportRepo.submitReport(
-            reporterId = "alice",
-            targetId = "bob",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.HARASSMENT,
-            additionalText = "Bob sent me threatening messages.",
-        )
+        val report =
+            reportRepo.submitReport(
+                reporterId = "alice",
+                targetId = "bob",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.HARASSMENT,
+                additionalText = "Bob sent me threatening messages.",
+            )
 
         assertNotNull(report)
         assertEquals("alice", report.reporterId)
@@ -243,12 +250,13 @@ class MyfriendsSharedCoreRemediatedV3E2ETest {
     fun `scenario user reports an offensive message`() {
         val reportRepo = ReportRepository()
 
-        val report = reportRepo.submitReport(
-            reporterId = "alice",
-            targetId = "msg-777",
-            targetKind = ReportTargetKind.MESSAGE,
-            reason = ReportReason.INAPPROPRIATE_CONTENT,
-        )
+        val report =
+            reportRepo.submitReport(
+                reporterId = "alice",
+                targetId = "msg-777",
+                targetKind = ReportTargetKind.MESSAGE,
+                reason = ReportReason.INAPPROPRIATE_CONTENT,
+            )
 
         assertNotNull(report)
         assertEquals(ReportTargetKind.MESSAGE, report.targetKind)
@@ -282,12 +290,13 @@ class MyfriendsSharedCoreRemediatedV3E2ETest {
 
         // Alice can still report Bob (AC#10: moderation is independent of blocks).
         val reportRepo = ReportRepository()
-        val report = reportRepo.submitReport(
-            reporterId = "alice",
-            targetId = "bob",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.SPAM,
-        )
+        val report =
+            reportRepo.submitReport(
+                reporterId = "alice",
+                targetId = "bob",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.SPAM,
+            )
         assertNotNull(report)
     }
 
@@ -444,12 +453,13 @@ class MyfriendsSharedCoreRemediatedV3E2ETest {
         val bobProfile = saveProfile(profileRepo, "bob")
         val messaging = MessagingRepository(profileRepo)
         fullyConnect(messaging, "alice", "bob")
-        val conn = Connection(
-            id = "alice::bob",
-            requesterId = "alice",
-            recipientId = "bob",
-            status = ConnectionStatus.ACCEPTED,
-        )
+        val conn =
+            Connection(
+                id = "alice::bob",
+                requesterId = "alice",
+                recipientId = "bob",
+                status = ConnectionStatus.ACCEPTED,
+            )
         messaging.sendMessage("alice", "bob", "Hey!")
 
         val cache = OfflineCache()
@@ -513,13 +523,14 @@ class MyfriendsSharedCoreRemediatedV3E2ETest {
         assertEquals(MessageRefusal.BLOCKED, blockedMsg.reason)
 
         // 6. Alice reports Bob (AC#9, AC#10).
-        val report = reportRepo.submitReport(
-            reporterId = "alice",
-            targetId = "bob",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.HARASSMENT,
-            additionalText = "He sent harassing messages.",
-        )
+        val report =
+            reportRepo.submitReport(
+                reporterId = "alice",
+                targetId = "bob",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.HARASSMENT,
+                additionalText = "He sent harassing messages.",
+            )
         assertNotNull(report)
 
         // 7. Bob deletes his account (AC#11).
@@ -533,5 +544,4 @@ class MyfriendsSharedCoreRemediatedV3E2ETest {
         val retainedReports = reportRepo.getReportsAgainst("bob")
         assertEquals(1, retainedReports.size)
     }
-
 }

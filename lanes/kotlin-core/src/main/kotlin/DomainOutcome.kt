@@ -14,10 +14,14 @@
  */
 sealed class ConnectionRequestResult {
     /** The request was accepted and a new pending [connection] was created. */
-    data class Allowed(val connection: Connection) : ConnectionRequestResult()
+    data class Allowed(
+        val connection: Connection,
+    ) : ConnectionRequestResult()
 
     /** The request was refused for [reason]. No connection was created. */
-    data class Refused(val reason: ConnectionRequestRefusal) : ConnectionRequestResult()
+    data class Refused(
+        val reason: ConnectionRequestRefusal,
+    ) : ConnectionRequestResult()
 }
 
 /**
@@ -71,10 +75,14 @@ enum class ConnectionRequestRefusal {
  */
 sealed class MessageResult {
     /** The message was accepted and [message] was persisted. */
-    data class Allowed(val message: Message) : MessageResult()
+    data class Allowed(
+        val message: Message,
+    ) : MessageResult()
 
     /** The message was refused for [reason]. Nothing was persisted. */
-    data class Refused(val reason: MessageRefusal) : MessageResult()
+    data class Refused(
+        val reason: MessageRefusal,
+    ) : MessageResult()
 }
 
 /**

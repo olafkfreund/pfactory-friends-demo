@@ -21,8 +21,9 @@
  * The same logic exists verbatim in the Swift lane (MessagingRepository.swift)
  * so that both platforms share one set of rules (constitution P9).
  */
-class MessagingRepository(private val profileRepository: ProfileRepository) {
-
+class MessagingRepository(
+    private val profileRepository: ProfileRepository,
+) {
     private val connections: MutableMap<String, Connection> = mutableMapOf()
     private val messages: MutableList<Message> = mutableListOf()
     private var nextMessageId: Int = 0
@@ -50,7 +51,10 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
      * Messaging is not permitted until the recipient calls
      * [acceptConnectionRequest] (AC#6).
      */
-    fun sendConnectionRequest(requesterId: String, recipientId: String): Connection? =
+    fun sendConnectionRequest(
+        requesterId: String,
+        recipientId: String,
+    ): Connection? =
         when (val outcome = sendConnectionRequestResult(requesterId, recipientId)) {
             is ConnectionRequestResult.Allowed -> outcome.connection
             is ConnectionRequestResult.Refused -> null
@@ -81,32 +85,39 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
         requesterId: String,
         recipientId: String,
     ): ConnectionRequestResult {
-        if (requesterId.isBlank() || recipientId.isBlank())
+        if (requesterId.isBlank() || recipientId.isBlank()) {
             return ConnectionRequestResult.Refused(ConnectionRequestRefusal.BLANK_ID)
-        if (requesterId == recipientId)
+        }
+        if (requesterId == recipientId) {
             return ConnectionRequestResult.Refused(ConnectionRequestRefusal.SELF_REQUEST)
+        }
         // AC#7 / P5: a blocked user cannot initiate or receive a connection request.
         if (profileRepository.isBlocked(blockerId = recipientId, blockedId = requesterId) ||
-            profileRepository.isBlocked(blockerId = requesterId, blockedId = recipientId))
+            profileRepository.isBlocked(blockerId = requesterId, blockedId = recipientId)
+        ) {
             return ConnectionRequestResult.Refused(ConnectionRequestRefusal.BLOCKED)
+        }
         val connectionId = canonicalConnectionId(requesterId, recipientId)
         // Idempotency: if a connection already exists (pending or accepted), refuse the
         // new attempt rather than silently creating a duplicate.
-        if (connections.containsKey(connectionId))
+        if (connections.containsKey(connectionId)) {
             return ConnectionRequestResult.Refused(ConnectionRequestRefusal.ALREADY_EXISTS)
+        }
         // AC#5: at most MAX_CONNECTION_REQUESTS_PER_DAY new requests in any 24-hour window.
         val nowMs = System.currentTimeMillis()
         val windowStartMs = nowMs - MILLIS_PER_DAY
         val timestamps = requestTimestamps.getOrPut(requesterId) { mutableListOf() }
         // Prune expired entries so the map does not grow without bound.
         timestamps.removeAll { it < windowStartMs }
-        if (timestamps.size >= MAX_CONNECTION_REQUESTS_PER_DAY)
+        if (timestamps.size >= MAX_CONNECTION_REQUESTS_PER_DAY) {
             return ConnectionRequestResult.Refused(ConnectionRequestRefusal.RATE_LIMIT_EXCEEDED)
-        val connection = Connection(
-            id = connectionId,
-            requesterId = requesterId,
-            recipientId = recipientId,
-        )
+        }
+        val connection =
+            Connection(
+                id = connectionId,
+                requesterId = requesterId,
+                recipientId = recipientId,
+            )
         connections[connectionId] = connection
         timestamps.add(nowMs)
         return ConnectionRequestResult.Allowed(connection)
@@ -124,7 +135,10 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
      *
      * After this call returns `true`, both parties may send messages (AC#6).
      */
-    fun acceptConnectionRequest(connectionId: String, acceptorId: String): Boolean {
+    fun acceptConnectionRequest(
+        connectionId: String,
+        acceptorId: String,
+    ): Boolean {
         val connection = connections[connectionId] ?: return false
         if (connection.recipientId != acceptorId) return false
         if (connection.status != ConnectionStatus.PENDING) return false
@@ -140,7 +154,10 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
      *
      * AC#6: only an accepted connection permits messaging between the pair.
      */
-    fun areConnected(userId1: String, userId2: String): Boolean {
+    fun areConnected(
+        userId1: String,
+        userId2: String,
+    ): Boolean {
         val connectionId = canonicalConnectionId(userId1, userId2)
         return connections[connectionId]?.status == ConnectionStatus.ACCEPTED
     }
@@ -154,7 +171,11 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
      * The [body] is stored as supplied; no trimming is applied. The caller is
      * responsible for any display normalisation before calling.
      */
-    fun sendMessage(senderId: String, recipientId: String, body: String): Message? =
+    fun sendMessage(
+        senderId: String,
+        recipientId: String,
+        body: String,
+    ): Message? =
         when (val outcome = sendMessageResult(senderId, recipientId, body)) {
             is MessageResult.Allowed -> outcome.message
             is MessageResult.Refused -> null
@@ -182,24 +203,33 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
      * The same algorithm is in the Swift lane (MessagingRepository.swift),
      * constitution P9.
      */
-    fun sendMessageResult(senderId: String, recipientId: String, body: String): MessageResult {
+    fun sendMessageResult(
+        senderId: String,
+        recipientId: String,
+        body: String,
+    ): MessageResult {
         // AC#6: the pair must hold an ACCEPTED connection.
-        if (!areConnected(senderId, recipientId))
+        if (!areConnected(senderId, recipientId)) {
             return MessageResult.Refused(MessageRefusal.NOT_CONNECTED)
+        }
         // AC#7 / P5: a blocked user cannot send messages.
-        if (profileRepository.isBlocked(blockerId = recipientId, blockedId = senderId))
+        if (profileRepository.isBlocked(blockerId = recipientId, blockedId = senderId)) {
             return MessageResult.Refused(MessageRefusal.BLOCKED)
+        }
         // Message body validation.
-        if (body.isBlank())
+        if (body.isBlank()) {
             return MessageResult.Refused(MessageRefusal.BLANK_BODY)
-        if (body.length > MAX_MESSAGE_LENGTH)
+        }
+        if (body.length > MAX_MESSAGE_LENGTH) {
             return MessageResult.Refused(MessageRefusal.BODY_TOO_LONG)
-        val message = Message(
-            id = "msg-${nextMessageId++}",
-            senderId = senderId,
-            recipientId = recipientId,
-            body = body,
-        )
+        }
+        val message =
+            Message(
+                id = "msg-${nextMessageId++}",
+                senderId = senderId,
+                recipientId = recipientId,
+                body = body,
+            )
         messages.add(message)
         return MessageResult.Allowed(message)
     }
@@ -211,10 +241,13 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
      * The result includes messages sent in either direction between the pair.
      * Returns an empty list when no messages have been exchanged.
      */
-    fun getMessages(userId1: String, userId2: String): List<Message> =
+    fun getMessages(
+        userId1: String,
+        userId2: String,
+    ): List<Message> =
         messages.filter { msg ->
             (msg.senderId == userId1 && msg.recipientId == userId2) ||
-            (msg.senderId == userId2 && msg.recipientId == userId1)
+                (msg.senderId == userId2 && msg.recipientId == userId1)
         }
 
     /**
@@ -224,7 +257,10 @@ class MessagingRepository(private val profileRepository: ProfileRepository) {
      * The key is identical regardless of argument order, so one [Connection]
      * record covers both the (A→B) and (B→A) perspectives.
      */
-    private fun canonicalConnectionId(id1: String, id2: String): String {
+    private fun canonicalConnectionId(
+        id1: String,
+        id2: String,
+    ): String {
         val (a, b) = if (id1 <= id2) Pair(id1, id2) else Pair(id2, id1)
         return "$a::$b"
     }

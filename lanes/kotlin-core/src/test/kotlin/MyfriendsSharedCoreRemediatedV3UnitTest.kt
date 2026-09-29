@@ -1,7 +1,6 @@
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -15,11 +14,12 @@ import kotlin.test.assertTrue
  * [MyfriendsSharedCoreRemediatedV3IntegrationTest].
  */
 class MyfriendsSharedCoreRemediatedV3UnitTest {
-
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private fun photo(bytes: ByteArray = byteArrayOf(1, 2, 3), format: String = "png") =
-        ProfilePhoto(bytes = bytes, format = format)
+    private fun photo(
+        bytes: ByteArray = byteArrayOf(1, 2, 3),
+        format: String = "png",
+    ) = ProfilePhoto(bytes = bytes, format = format)
 
     private fun adultProfile(
         id: String,
@@ -58,19 +58,21 @@ class MyfriendsSharedCoreRemediatedV3UnitTest {
         val availability1 = setOf("weekends")
         val availability2 = setOf("weekends", "mornings")
 
-        val forwardScore = MatchScore.score(
-            myInterests = interests1,
-            theirInterests = interests2,
-            myAvailability = availability1,
-            theirAvailability = availability2,
-        )
+        val forwardScore =
+            MatchScore.score(
+                myInterests = interests1,
+                theirInterests = interests2,
+                myAvailability = availability1,
+                theirAvailability = availability2,
+            )
         // Score is deterministic: same inputs always produce the same result.
-        val secondCall = MatchScore.score(
-            myInterests = interests1,
-            theirInterests = interests2,
-            myAvailability = availability1,
-            theirAvailability = availability2,
-        )
+        val secondCall =
+            MatchScore.score(
+                myInterests = interests1,
+                theirInterests = interests2,
+                myAvailability = availability1,
+                theirAvailability = availability2,
+            )
 
         assertEquals(forwardScore, secondCall)
     }
@@ -80,24 +82,26 @@ class MyfriendsSharedCoreRemediatedV3UnitTest {
         // interests: {jazz,climbing} ∩ {jazz} = {jazz} → 1/2 = 0.5
         // availability: {weekends} ∩ {weekends,mornings} = {weekends} → 1/1 = 1.0
         // combined = (0.5 + 1.0) / 2 = 0.75
-        val score = MatchScore.score(
-            myInterests = setOf("jazz", "climbing"),
-            theirInterests = setOf("jazz"),
-            myAvailability = setOf("weekends"),
-            theirAvailability = setOf("weekends", "mornings"),
-        )
+        val score =
+            MatchScore.score(
+                myInterests = setOf("jazz", "climbing"),
+                theirInterests = setOf("jazz"),
+                myAvailability = setOf("weekends"),
+                theirAvailability = setOf("weekends", "mornings"),
+            )
 
         assertEquals(0.75, score)
     }
 
     @Test
     fun `AC1 match score is zero when there is no overlap`() {
-        val score = MatchScore.score(
-            myInterests = setOf("jazz"),
-            theirInterests = setOf("chess"),
-            myAvailability = setOf("weekends"),
-            theirAvailability = setOf("mornings"),
-        )
+        val score =
+            MatchScore.score(
+                myInterests = setOf("jazz"),
+                theirInterests = setOf("chess"),
+                myAvailability = setOf("weekends"),
+                theirAvailability = setOf("mornings"),
+            )
 
         assertEquals(0.0, score)
     }
@@ -208,16 +212,17 @@ class MyfriendsSharedCoreRemediatedV3UnitTest {
     fun `AC4 the refusal for an underage account names age as the reason`() {
         val repo = ProfileRepository()
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repo.save(
-                Profile(
-                    id = "underage",
-                    displayName = "Underage User",
-                    photo = photo(),
-                    age = ProfileRepository.MIN_AGE - 1,
-                ),
-            )
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repo.save(
+                    Profile(
+                        id = "underage",
+                        displayName = "Underage User",
+                        photo = photo(),
+                        age = ProfileRepository.MIN_AGE - 1,
+                    ),
+                )
+            }
 
         // AC#4: the refusal must name age as the reason.
         assertTrue(
@@ -382,10 +387,11 @@ class MyfriendsSharedCoreRemediatedV3UnitTest {
             messaging.sendConnectionRequest(requesterId = "requester", recipientId = "target-$i")
         }
 
-        val lastAllowed = messaging.sendConnectionRequestResult(
-            requesterId = "requester",
-            recipientId = "target-${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY}",
-        )
+        val lastAllowed =
+            messaging.sendConnectionRequestResult(
+                requesterId = "requester",
+                recipientId = "target-${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY}",
+            )
         assertTrue(lastAllowed is ConnectionRequestResult.Allowed)
     }
 
@@ -402,10 +408,11 @@ class MyfriendsSharedCoreRemediatedV3UnitTest {
             messaging.sendConnectionRequest(requesterId = "requester", recipientId = "target-$i")
         }
 
-        val overLimit = messaging.sendConnectionRequestResult(
-            requesterId = "requester",
-            recipientId = "target-${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1}",
-        )
+        val overLimit =
+            messaging.sendConnectionRequestResult(
+                requesterId = "requester",
+                recipientId = "target-${MessagingRepository.MAX_CONNECTION_REQUESTS_PER_DAY + 1}",
+            )
 
         assertTrue(overLimit is ConnectionRequestResult.Refused)
         assertEquals(ConnectionRequestRefusal.RATE_LIMIT_EXCEEDED, overLimit.reason)
@@ -417,13 +424,14 @@ class MyfriendsSharedCoreRemediatedV3UnitTest {
     fun `AC9 a report records reporter, target, reason, and the time of creation`() {
         val repo = ReportRepository()
 
-        val report = repo.submitReport(
-            reporterId = "alice",
-            targetId = "bob",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.HARASSMENT,
-            additionalText = "Details here",
-        )
+        val report =
+            repo.submitReport(
+                reporterId = "alice",
+                targetId = "bob",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.HARASSMENT,
+                additionalText = "Details here",
+            )
 
         assertNotNull(report)
         assertEquals("alice", report.reporterId)
@@ -448,12 +456,13 @@ class MyfriendsSharedCoreRemediatedV3UnitTest {
     fun `AC9 a report can target a message as well as a user`() {
         val repo = ReportRepository()
 
-        val report = repo.submitReport(
-            reporterId = "alice",
-            targetId = "msg-001",
-            targetKind = ReportTargetKind.MESSAGE,
-            reason = ReportReason.INAPPROPRIATE_CONTENT,
-        )
+        val report =
+            repo.submitReport(
+                reporterId = "alice",
+                targetId = "msg-001",
+                targetKind = ReportTargetKind.MESSAGE,
+                reason = ReportReason.INAPPROPRIATE_CONTENT,
+            )
 
         assertNotNull(report)
         assertEquals(ReportTargetKind.MESSAGE, report.targetKind)
@@ -469,12 +478,13 @@ class MyfriendsSharedCoreRemediatedV3UnitTest {
         profileRepo.blockUser(blockerId = "alice", blockedId = "bob")
         val reportRepo = ReportRepository()
 
-        val report = reportRepo.submitReport(
-            reporterId = "alice",
-            targetId = "bob",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.HARASSMENT,
-        )
+        val report =
+            reportRepo.submitReport(
+                reporterId = "alice",
+                targetId = "bob",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.HARASSMENT,
+            )
 
         assertNotNull(report, "report must be accepted regardless of block state")
     }
@@ -593,13 +603,14 @@ class MyfriendsSharedCoreRemediatedV3UnitTest {
         // The searcher profile has no location set; the search location is passed
         // as a method parameter only and is not persisted to the profile.
         val repo = ProfileRepository()
-        val searcherWithNoLocation = Profile(
-            id = "searcher",
-            displayName = "Searcher",
-            photo = photo(),
-            age = 25,
-            location = null,
-        )
+        val searcherWithNoLocation =
+            Profile(
+                id = "searcher",
+                displayName = "Searcher",
+                photo = photo(),
+                age = 25,
+                location = null,
+            )
         val searcherLocation = GeoLocation(lat = 51.500, lon = -0.100)
         repo.save(adultProfile("open-user", openToFriends = true))
 
@@ -693,12 +704,13 @@ class MyfriendsSharedCoreRemediatedV3UnitTest {
     fun `AC15 submitReport returns the report immediately — it is accepted on receipt`() {
         val repo = ReportRepository()
 
-        val report = repo.submitReport(
-            reporterId = "reporter",
-            targetId = "reported",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.SPAM,
-        )
+        val report =
+            repo.submitReport(
+                reporterId = "reporter",
+                targetId = "reported",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.SPAM,
+            )
 
         assertNotNull(report, "a submitted report must be accepted (non-null) immediately")
     }
@@ -768,12 +780,13 @@ class MyfriendsSharedCoreRemediatedV3UnitTest {
     fun `AC18 a report stores the reporter's identity so the response path can be audited`() {
         val repo = ReportRepository()
 
-        val report = repo.submitReport(
-            reporterId = "alice",
-            targetId = "bob",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.HARASSMENT,
-        )
+        val report =
+            repo.submitReport(
+                reporterId = "alice",
+                targetId = "bob",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.HARASSMENT,
+            )
 
         assertNotNull(report)
         assertEquals("alice", report.reporterId)

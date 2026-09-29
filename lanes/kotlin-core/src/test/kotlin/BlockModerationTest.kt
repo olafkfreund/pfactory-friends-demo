@@ -23,14 +23,15 @@ import kotlin.test.assertTrue
  * and performs no block check; these tests confirm that the design holds.
  */
 class BlockModerationTest {
-
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private fun validPhoto(): ProfilePhoto =
-        ProfilePhoto(bytes = byteArrayOf(1, 2, 3, 4), format = "png")
+    private fun validPhoto(): ProfilePhoto = ProfilePhoto(bytes = byteArrayOf(1, 2, 3, 4), format = "png")
 
     /** Returns a saved profile with the given [id]. */
-    private fun savedProfile(repo: ProfileRepository, id: String): Profile {
+    private fun savedProfile(
+        repo: ProfileRepository,
+        id: String,
+    ): Profile {
         val profile = Profile(id = id, displayName = "User $id", photo = validPhoto())
         repo.save(profile)
         return profile
@@ -74,12 +75,13 @@ class BlockModerationTest {
         profileRepo.blockUser(blockerId = "alice", blockedId = "bob")
 
         val reportRepo = ReportRepository()
-        val report = reportRepo.submitReport(
-            reporterId = "alice",
-            targetId = "bob",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.HARASSMENT,
-        )
+        val report =
+            reportRepo.submitReport(
+                reporterId = "alice",
+                targetId = "bob",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.HARASSMENT,
+            )
 
         assertNotNull(report, "report must be accepted even when alice has blocked bob")
         assertEquals("alice", report.reporterId)
@@ -95,12 +97,13 @@ class BlockModerationTest {
         profileRepo.blockUser(blockerId = "bob", blockedId = "alice")
 
         val reportRepo = ReportRepository()
-        val report = reportRepo.submitReport(
-            reporterId = "alice",
-            targetId = "bob",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.SPAM,
-        )
+        val report =
+            reportRepo.submitReport(
+                reporterId = "alice",
+                targetId = "bob",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.SPAM,
+            )
 
         assertNotNull(report, "report must be accepted even when bob has blocked alice")
         assertEquals("alice", report.reporterId)
@@ -117,12 +120,13 @@ class BlockModerationTest {
         profileRepo.blockUser(blockerId = "bob", blockedId = "alice")
 
         val reportRepo = ReportRepository()
-        val report = reportRepo.submitReport(
-            reporterId = "alice",
-            targetId = "bob",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.INAPPROPRIATE_CONTENT,
-        )
+        val report =
+            reportRepo.submitReport(
+                reporterId = "alice",
+                targetId = "bob",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.INAPPROPRIATE_CONTENT,
+            )
 
         assertNotNull(report, "report must be accepted even with mutual blocks")
     }
@@ -144,7 +148,7 @@ class BlockModerationTest {
         val reportRepo = ReportRepository()
         reportRepo.submitReport("alice", "bob", ReportTargetKind.USER, ReportReason.SPAM)
         reportRepo.submitReport("carol", "bob", ReportTargetKind.USER, ReportReason.HARASSMENT)
-        reportRepo.submitReport("dave",  "bob", ReportTargetKind.USER, ReportReason.FAKE_PROFILE)
+        reportRepo.submitReport("dave", "bob", ReportTargetKind.USER, ReportReason.FAKE_PROFILE)
 
         val reports = reportRepo.getReportsAgainst("bob")
 
@@ -191,12 +195,13 @@ class BlockModerationTest {
         savedProfile(profileRepo, "bob")
 
         val reportRepo = ReportRepository()
-        val report = reportRepo.submitReport(
-            reporterId = "alice",
-            targetId = "bob",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.HARASSMENT,
-        )
+        val report =
+            reportRepo.submitReport(
+                reporterId = "alice",
+                targetId = "bob",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.HARASSMENT,
+            )
         assertNotNull(report)
 
         // Block established after the report.
@@ -219,12 +224,13 @@ class BlockModerationTest {
         profileRepo.blockUser(blockerId = "bob", blockedId = "alice")
 
         val reportRepo = ReportRepository()
-        val report = reportRepo.submitReport(
-            reporterId = "alice",
-            targetId = "msg-42",
-            targetKind = ReportTargetKind.MESSAGE,
-            reason = ReportReason.INAPPROPRIATE_CONTENT,
-        )
+        val report =
+            reportRepo.submitReport(
+                reporterId = "alice",
+                targetId = "msg-42",
+                targetKind = ReportTargetKind.MESSAGE,
+                reason = ReportReason.INAPPROPRIATE_CONTENT,
+            )
 
         assertNotNull(report, "message report must be accepted regardless of mutual blocks")
         assertEquals(ReportTargetKind.MESSAGE, report.targetKind)

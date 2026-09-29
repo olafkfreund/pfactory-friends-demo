@@ -83,7 +83,10 @@ data class Profile(
  * equality, so two photos built from equal-content-but-distinct arrays would
  * not be considered equal.
  */
-data class ProfilePhoto(val bytes: ByteArray, val format: String) {
+data class ProfilePhoto(
+    val bytes: ByteArray,
+    val format: String,
+) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is ProfilePhoto) return false

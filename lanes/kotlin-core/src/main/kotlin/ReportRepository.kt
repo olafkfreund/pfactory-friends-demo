@@ -16,7 +16,6 @@
  * so that both platforms share one set of rules (constitution P9).
  */
 class ReportRepository {
-
     private val reports: MutableList<Report> = mutableListOf()
     private var nextReportId: Int = 0
 
@@ -47,14 +46,15 @@ class ReportRepository {
         if (targetId.isBlank()) return null
         val trimmedText = additionalText.trim()
         if (trimmedText.length > MAX_FREE_TEXT_LENGTH) return null
-        val report = Report(
-            id = "report-${nextReportId++}",
-            reporterId = reporterId,
-            targetId = targetId,
-            targetKind = targetKind,
-            reason = reason,
-            additionalText = trimmedText,
-        )
+        val report =
+            Report(
+                id = "report-${nextReportId++}",
+                reporterId = reporterId,
+                targetId = targetId,
+                targetKind = targetKind,
+                reason = reason,
+                additionalText = trimmedText,
+            )
         reports.add(report)
         return report
     }
@@ -65,8 +65,7 @@ class ReportRepository {
      *
      * Returns an empty list when no reports have been filed against [targetId].
      */
-    fun getReportsAgainst(targetId: String): List<Report> =
-        reports.filter { it.targetId == targetId }
+    fun getReportsAgainst(targetId: String): List<Report> = reports.filter { it.targetId == targetId }
 
     /**
      * Returns all reports filed by [reporterId] in the order they were
@@ -74,8 +73,7 @@ class ReportRepository {
      *
      * Returns an empty list when [reporterId] has filed no reports.
      */
-    fun getReportsByReporter(reporterId: String): List<Report> =
-        reports.filter { it.reporterId == reporterId }
+    fun getReportsByReporter(reporterId: String): List<Report> = reports.filter { it.reporterId == reporterId }
 
     companion object {
         /**

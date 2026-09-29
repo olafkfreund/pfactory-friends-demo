@@ -5,19 +5,19 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ReportTest {
-
     // ── submitReport: user target ─────────────────────────────────────────
 
     @Test
     fun `submitReport for a user with valid arguments returns the persisted report`() {
         val repo = ReportRepository()
 
-        val report = repo.submitReport(
-            reporterId = "alice",
-            targetId = "bob",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.SPAM,
-        )
+        val report =
+            repo.submitReport(
+                reporterId = "alice",
+                targetId = "bob",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.SPAM,
+            )
 
         assertNotNull(report)
         assertEquals("alice", report.reporterId)
@@ -33,12 +33,13 @@ class ReportTest {
     fun `submitReport for a message with valid arguments returns the persisted report`() {
         val repo = ReportRepository()
 
-        val report = repo.submitReport(
-            reporterId = "alice",
-            targetId = "msg-42",
-            targetKind = ReportTargetKind.MESSAGE,
-            reason = ReportReason.HARASSMENT,
-        )
+        val report =
+            repo.submitReport(
+                reporterId = "alice",
+                targetId = "msg-42",
+                targetKind = ReportTargetKind.MESSAGE,
+                reason = ReportReason.HARASSMENT,
+            )
 
         assertNotNull(report)
         assertEquals(ReportTargetKind.MESSAGE, report.targetKind)
@@ -57,7 +58,7 @@ class ReportTest {
                 targetId = "bob",
                 targetKind = ReportTargetKind.USER,
                 reason = ReportReason.SPAM,
-            )
+            ),
         )
     }
 
@@ -71,7 +72,7 @@ class ReportTest {
                 targetId = "",
                 targetKind = ReportTargetKind.USER,
                 reason = ReportReason.SPAM,
-            )
+            ),
         )
     }
 
@@ -81,13 +82,14 @@ class ReportTest {
     fun `submitReport stores the trimmed additional text`() {
         val repo = ReportRepository()
 
-        val report = repo.submitReport(
-            reporterId = "alice",
-            targetId = "bob",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.OTHER,
-            additionalText = "  extra context  ",
-        )
+        val report =
+            repo.submitReport(
+                reporterId = "alice",
+                targetId = "bob",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.OTHER,
+                additionalText = "  extra context  ",
+            )
 
         assertNotNull(report)
         assertEquals("extra context", report.additionalText)
@@ -98,13 +100,14 @@ class ReportTest {
         val repo = ReportRepository()
         val maxText = "a".repeat(ReportRepository.MAX_FREE_TEXT_LENGTH)
 
-        val report = repo.submitReport(
-            reporterId = "alice",
-            targetId = "bob",
-            targetKind = ReportTargetKind.USER,
-            reason = ReportReason.SPAM,
-            additionalText = maxText,
-        )
+        val report =
+            repo.submitReport(
+                reporterId = "alice",
+                targetId = "bob",
+                targetKind = ReportTargetKind.USER,
+                reason = ReportReason.SPAM,
+                additionalText = maxText,
+            )
 
         assertNotNull(report)
         assertEquals(maxText, report.additionalText)
@@ -122,7 +125,7 @@ class ReportTest {
                 targetKind = ReportTargetKind.USER,
                 reason = ReportReason.SPAM,
                 additionalText = tooLong,
-            )
+            ),
         )
     }
 

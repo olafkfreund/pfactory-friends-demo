@@ -16,7 +16,6 @@
  * non-durable store; it is enough to prove the save/find/delete round-trip.
  */
 class ProfileRepository {
-
     private val profiles: MutableMap<String, Profile> = mutableMapOf()
 
     /**
@@ -114,18 +113,19 @@ class ProfileRepository {
         // one is present. An absent photo is stored as null, leaving the profile
         // incomplete rather than being rejected.
         val photo = profile.photo
-        val normalizedPhoto = if (photo != null) {
-            val normalizedPhotoFormat = photo.format.trim().lowercase()
-            require(normalizedPhotoFormat in SUPPORTED_PHOTO_FORMATS) {
-                "photo format must be one of ${SUPPORTED_PHOTO_FORMATS.joinToString(", ")}"
+        val normalizedPhoto =
+            if (photo != null) {
+                val normalizedPhotoFormat = photo.format.trim().lowercase()
+                require(normalizedPhotoFormat in SUPPORTED_PHOTO_FORMATS) {
+                    "photo format must be one of ${SUPPORTED_PHOTO_FORMATS.joinToString(", ")}"
+                }
+                require(photo.bytes.size <= MAX_PHOTO_SIZE_BYTES) {
+                    "photo must be at most $MAX_PHOTO_SIZE_BYTES bytes"
+                }
+                photo.copy(format = normalizedPhotoFormat)
+            } else {
+                null
             }
-            require(photo.bytes.size <= MAX_PHOTO_SIZE_BYTES) {
-                "photo must be at most $MAX_PHOTO_SIZE_BYTES bytes"
-            }
-            photo.copy(format = normalizedPhotoFormat)
-        } else {
-            null
-        }
         // Age assurance, per constitution P3 (enforceable): any feature
         // reachable by someone under 18 must state its age-assurance mechanism
         // and what changes for a minor. The domain-layer floor is MIN_AGE (16),
@@ -148,11 +148,12 @@ class ProfileRepository {
         // characters and kept as 7, and a name padded to the limit persisted
         // over it. The same rule applies to the biography and to the photo
         // format, which is kept in its normalized form.
-        profiles[profile.id] = profile.copy(
-            displayName = trimmed,
-            biography = trimmedBiography,
-            photo = normalizedPhoto,
-        )
+        profiles[profile.id] =
+            profile.copy(
+                displayName = trimmed,
+                biography = trimmedBiography,
+                photo = normalizedPhoto,
+            )
     }
 
     /**
@@ -167,7 +168,10 @@ class ProfileRepository {
      * Per constitution P5 (enforceable): any person-to-person surface ships
      * with blocking in the same phase as the feature that creates the data.
      */
-    fun blockUser(blockerId: String, blockedId: String): Boolean {
+    fun blockUser(
+        blockerId: String,
+        blockedId: String,
+    ): Boolean {
         if (!profiles.containsKey(blockerId)) return false
         if (!profiles.containsKey(blockedId)) return false
         blockedBy.getOrPut(blockerId) { mutableSetOf() }.add(blockedId)
@@ -180,8 +184,10 @@ class ProfileRepository {
      * The relationship is directional: A blocking B does not mean B has
      * blocked A.
      */
-    fun isBlocked(blockerId: String, blockedId: String): Boolean =
-        blockedBy[blockerId]?.contains(blockedId) == true
+    fun isBlocked(
+        blockerId: String,
+        blockedId: String,
+    ): Boolean = blockedBy[blockerId]?.contains(blockedId) == true
 
     /**
      * Returns all open profiles as [DiscoveryResult]s, sorted by [MatchScore]
@@ -225,24 +231,23 @@ class ProfileRepository {
                     // Age-bracket isolation (constitution P3): a minor searcher
                     // sees only minor candidates; an adult searcher sees only adults.
                     (it.age < MIN_ADULT_AGE) == isSearcherMinor
-            }
-            .map { candidate ->
+            }.map { candidate ->
                 val theirInterests = candidate.interests.toSet()
                 val theirActivities = candidate.activities.toSet()
-                val score = MatchScore.score(
-                    myInterests = myInterests,
-                    theirInterests = theirInterests,
-                    myAvailability = myActivities,
-                    theirAvailability = theirActivities,
-                )
+                val score =
+                    MatchScore.score(
+                        myInterests = myInterests,
+                        theirInterests = theirInterests,
+                        myAvailability = myActivities,
+                        theirAvailability = theirActivities,
+                    )
                 DiscoveryResult(
                     profile = candidate,
                     score = score,
                     sharedInterests = myInterests.intersect(theirInterests).sorted(),
                     sharedActivities = myActivities.intersect(theirActivities).sorted(),
                 )
-            }
-            .sortedByDescending { it.score }
+            }.sortedByDescending { it.score }
     }
 
     /** Returns the stored [Profile] for [id], or null if none exists. */
@@ -278,7 +283,10 @@ class ProfileRepository {
      * push-propagation latency) outside the scope of this in-process
      * repository.
      */
-    fun setOpenToFriends(id: String, open: Boolean): Boolean {
+    fun setOpenToFriends(
+        id: String,
+        open: Boolean,
+    ): Boolean {
         val profile = profiles[id] ?: return false
         profiles[id] = profile.copy(openToFriends = open)
         return true
@@ -306,10 +314,11 @@ class ProfileRepository {
         searcher: Profile,
         searcherLocation: GeoLocation,
         radius: SearchRadius,
-    ): List<DiscoveryResult> = discover(searcher).filter { result ->
-        val candidateLoc = result.profile.location ?: return@filter false
-        searcherLocation.distanceTo(candidateLoc) <= radius.kilometres
-    }
+    ): List<DiscoveryResult> =
+        discover(searcher).filter { result ->
+            val candidateLoc = result.profile.location ?: return@filter false
+            searcherLocation.distanceTo(candidateLoc) <= radius.kilometres
+        }
 
     /**
      * Returns all stored profiles whose [Profile.openToFriends] flag is true.

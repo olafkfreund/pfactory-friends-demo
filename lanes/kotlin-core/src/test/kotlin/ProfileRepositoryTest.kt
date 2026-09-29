@@ -200,16 +200,17 @@ class ProfileRepositoryTest {
         val repository = ProfileRepository()
         val tooLong = "a".repeat(ProfileRepository.MAX_BIOGRAPHY_LENGTH + 1)
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(
-                Profile(
-                    id = "user-1",
-                    displayName = "Ada Lovelace",
-                    photo = validPhoto(),
-                    biography = tooLong,
-                ),
-            )
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(
+                    Profile(
+                        id = "user-1",
+                        displayName = "Ada Lovelace",
+                        photo = validPhoto(),
+                        biography = tooLong,
+                    ),
+                )
+            }
         assertTrue(error.message?.contains(ProfileRepository.MAX_BIOGRAPHY_LENGTH.toString()) == true)
         assertNull(repository.find("user-1"))
     }
@@ -263,9 +264,10 @@ class ProfileRepositoryTest {
         // the error names at least one supported format.
         val repository = ProfileRepository()
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(format = "gif")))
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(format = "gif")))
+            }
         assertTrue(ProfileRepository.SUPPORTED_PHOTO_FORMATS.any { error.message?.contains(it) == true })
         assertNull(repository.find("user-1"))
     }
@@ -277,9 +279,10 @@ class ProfileRepositoryTest {
         val repository = ProfileRepository()
         val tooBig = ByteArray(ProfileRepository.MAX_PHOTO_SIZE_BYTES + 1)
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = tooBig)))
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = tooBig)))
+            }
         assertTrue(error.message?.contains(ProfileRepository.MAX_PHOTO_SIZE_BYTES.toString()) == true)
         assertNull(repository.find("user-1"))
     }
@@ -292,7 +295,14 @@ class ProfileRepositoryTest {
             Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = maxBytes)),
         )
 
-        assertEquals(ProfileRepository.MAX_PHOTO_SIZE_BYTES, repository.find("user-1")?.photo?.bytes?.size)
+        assertEquals(
+            ProfileRepository.MAX_PHOTO_SIZE_BYTES,
+            repository
+                .find("user-1")
+                ?.photo
+                ?.bytes
+                ?.size,
+        )
     }
 
     @Test
@@ -428,16 +438,17 @@ class ProfileRepositoryTest {
         val repository = ProfileRepository()
         val tooMany = List(ProfileRepository.MAX_INTERESTS + 1) { "interest-$it" }
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(
-                Profile(
-                    id = "user-1",
-                    displayName = "Ada Lovelace",
-                    photo = validPhoto(),
-                    interests = tooMany,
-                ),
-            )
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(
+                    Profile(
+                        id = "user-1",
+                        displayName = "Ada Lovelace",
+                        photo = validPhoto(),
+                        interests = tooMany,
+                    ),
+                )
+            }
         assertTrue(error.message?.contains(ProfileRepository.MAX_INTERESTS.toString()) == true)
         assertNull(repository.find("user-1"))
     }
@@ -449,16 +460,17 @@ class ProfileRepositoryTest {
         val repository = ProfileRepository()
         val tooMany = List(ProfileRepository.MAX_ACTIVITIES + 1) { "activity-$it" }
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(
-                Profile(
-                    id = "user-1",
-                    displayName = "Ada Lovelace",
-                    photo = validPhoto(),
-                    activities = tooMany,
-                ),
-            )
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(
+                    Profile(
+                        id = "user-1",
+                        displayName = "Ada Lovelace",
+                        photo = validPhoto(),
+                        activities = tooMany,
+                    ),
+                )
+            }
         assertTrue(error.message?.contains(ProfileRepository.MAX_ACTIVITIES.toString()) == true)
         assertNull(repository.find("user-1"))
     }
@@ -472,17 +484,18 @@ class ProfileRepositoryTest {
         val interestsAtLimit = List(ProfileRepository.MAX_INTERESTS) { "interest-$it" }
         val activitiesOverLimit = List(ProfileRepository.MAX_ACTIVITIES + 1) { "activity-$it" }
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(
-                Profile(
-                    id = "user-1",
-                    displayName = "Ada Lovelace",
-                    photo = validPhoto(),
-                    interests = interestsAtLimit,
-                    activities = activitiesOverLimit,
-                ),
-            )
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(
+                    Profile(
+                        id = "user-1",
+                        displayName = "Ada Lovelace",
+                        photo = validPhoto(),
+                        interests = interestsAtLimit,
+                        activities = activitiesOverLimit,
+                    ),
+                )
+            }
         assertTrue(error.message?.contains(ProfileRepository.MAX_ACTIVITIES.toString()) == true)
         assertNull(repository.find("user-1"))
     }
@@ -666,12 +679,13 @@ class ProfileRepositoryTest {
     @Test
     fun `discover still returns other open profiles when one is blocked`() {
         val repository = ProfileRepository()
-        val searcher = Profile(
-            id = "searcher",
-            displayName = "Searcher",
-            photo = validPhoto(),
-            interests = listOf("jazz"),
-        )
+        val searcher =
+            Profile(
+                id = "searcher",
+                displayName = "Searcher",
+                photo = validPhoto(),
+                interests = listOf("jazz"),
+            )
         repository.save(searcher)
         repository.save(
             Profile(id = "ada", displayName = "Ada Lovelace", photo = validPhoto(), interests = listOf("jazz"), openToFriends = true),
@@ -696,17 +710,18 @@ class ProfileRepositoryTest {
         val interestsOverLimit = List(ProfileRepository.MAX_INTERESTS + 1) { "interest-$it" }
         val activitiesAtLimit = List(ProfileRepository.MAX_ACTIVITIES) { "activity-$it" }
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(
-                Profile(
-                    id = "user-1",
-                    displayName = "Ada Lovelace",
-                    photo = validPhoto(),
-                    interests = interestsOverLimit,
-                    activities = activitiesAtLimit,
-                ),
-            )
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(
+                    Profile(
+                        id = "user-1",
+                        displayName = "Ada Lovelace",
+                        photo = validPhoto(),
+                        interests = interestsOverLimit,
+                        activities = activitiesAtLimit,
+                    ),
+                )
+            }
         assertTrue(error.message?.contains(ProfileRepository.MAX_INTERESTS.toString()) == true)
         assertNull(repository.find("user-1"))
     }
@@ -768,9 +783,18 @@ class ProfileRepositoryTest {
         // rejects anyone below MIN_AGE (16) before anything is stored.
         val repository = ProfileRepository()
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = ProfileRepository.MIN_AGE - 1))
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(
+                    Profile(
+                        id = "user-1",
+                        displayName = "Ada Lovelace",
+                        photo = validPhoto(),
+                        age =
+                            ProfileRepository.MIN_AGE - 1,
+                    ),
+                )
+            }
         assertTrue(error.message?.contains(ProfileRepository.MIN_AGE.toString()) == true)
         assertNull(repository.find("user-1"))
     }
