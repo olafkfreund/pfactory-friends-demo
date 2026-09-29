@@ -20,6 +20,17 @@ class ProfileRepository {
     private val profiles: MutableMap<String, Profile> = mutableMapOf()
 
     /**
+     * Tracks which profiles a given user has blocked.
+     * Key: blocker id. Value: set of blocked ids.
+     *
+     * Per constitution P5: every person-to-person surface ships with blocking
+     * in the same phase. This is the domain-layer record; enforcement at the
+     * messaging/request layers is a higher-level concern outside this
+     * in-process repository.
+     */
+    private val blockedBy: MutableMap<String, MutableSet<String>> = mutableMapOf()
+
+    /**
      * Persists [profile], overwriting any existing record with the same id
      * (update semantics, not duplicate-create).
      *
@@ -134,6 +145,34 @@ class ProfileRepository {
     }
 
     /**
+     * Records that [blockerId] has blocked [blockedId]. A blocked profile is
+     * excluded from the blocker's discovery results (AC#7).
+     *
+     * Returns true if the block was recorded. Returns false if either
+     * [blockerId] or [blockedId] is not in the repository — you can only
+     * block a profile that exists. Blocking is idempotent: calling with the
+     * same pair a second time still returns true without adding a duplicate.
+     *
+     * Per constitution P5 (enforceable): any person-to-person surface ships
+     * with blocking in the same phase as the feature that creates the data.
+     */
+    fun blockUser(blockerId: String, blockedId: String): Boolean {
+        if (!profiles.containsKey(blockerId)) return false
+        if (!profiles.containsKey(blockedId)) return false
+        blockedBy.getOrPut(blockerId) { mutableSetOf() }.add(blockedId)
+        return true
+    }
+
+    /**
+     * Returns true if [blockerId] has blocked [blockedId].
+     *
+     * The relationship is directional: A blocking B does not mean B has
+     * blocked A.
+     */
+    fun isBlocked(blockerId: String, blockedId: String): Boolean =
+        blockedBy[blockerId]?.contains(blockedId) == true
+
+    /**
      * Returns all open profiles as [DiscoveryResult]s, sorted by [MatchScore]
      * descending, excluding the searcher themselves.
      *
@@ -154,8 +193,9 @@ class ProfileRepository {
     fun discover(searcher: Profile): List<DiscoveryResult> {
         val myInterests = searcher.interests.toSet()
         val myActivities = searcher.activities.toSet()
+        val myBlocked = blockedBy[searcher.id] ?: emptySet()
         return profiles.values
-            .filter { it.openToFriends && it.id != searcher.id }
+            .filter { it.openToFriends && it.id != searcher.id && it.id !in myBlocked }
             .map { candidate ->
                 val theirInterests = candidate.interests.toSet()
                 val theirActivities = candidate.activities.toSet()

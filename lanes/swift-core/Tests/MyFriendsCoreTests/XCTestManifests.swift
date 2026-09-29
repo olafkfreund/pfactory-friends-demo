@@ -69,6 +69,16 @@ extension ProfileRepositoryTests {
         ("testFindOpenReturnsEmptyListWhenNoProfilesAreOpen", testFindOpenReturnsEmptyListWhenNoProfilesAreOpen),
         ("testProfileSavedWithOpenToFriendsTrueAppearsInFindOpenImmediately", testProfileSavedWithOpenToFriendsTrueAppearsInFindOpenImmediately),
         ("testFindOpenReturnsAllOpenProfilesWhenMultipleExist", testFindOpenReturnsAllOpenProfilesWhenMultipleExist),
+        // AC#7: block user
+        ("testBlockUserReturnsTrueWhenBothProfilesExist", testBlockUserReturnsTrueWhenBothProfilesExist),
+        ("testBlockUserReturnsFalseWhenBlockerDoesNotExist", testBlockUserReturnsFalseWhenBlockerDoesNotExist),
+        ("testBlockUserReturnsFalseWhenBlockedUserDoesNotExist", testBlockUserReturnsFalseWhenBlockedUserDoesNotExist),
+        ("testBlockUserIsIdempotentBlockingTheSamePersonTwiceStillReturnsTrue", testBlockUserIsIdempotentBlockingTheSamePersonTwiceStillReturnsTrue),
+        ("testIsBlockedReturnsTrueAfterAUserIsBlocked", testIsBlockedReturnsTrueAfterAUserIsBlocked),
+        ("testIsBlockedReturnsFalseBeforeAnyBlockIsRecorded", testIsBlockedReturnsFalseBeforeAnyBlockIsRecorded),
+        ("testIsBlockedIsDirectionalBlockingAToB_DoesNotBlockBToA", testIsBlockedIsDirectionalBlockingAToB_DoesNotBlockBToA),
+        ("testDiscoverExcludesAProfileThatTheSearcherHasBlocked", testDiscoverExcludesAProfileThatTheSearcherHasBlocked),
+        ("testDiscoverStillReturnsOtherOpenProfilesWhenOneIsBlocked", testDiscoverStillReturnsOtherOpenProfilesWhenOneIsBlocked),
     ]
 }
 
