@@ -100,10 +100,48 @@ extension DiscoveryTests {
     ]
 }
 
+// AC#6: messaging after mutual connection acceptance
+extension MessagingTests {
+    static let __allTests = [
+        // AC#6: connection-state gate on sendMessage
+        ("testSendMessageWithoutAnyConnectionReturnsNil", testSendMessageWithoutAnyConnectionReturnsNil),
+        ("testSendMessageWithPendingConnectionReturnsNil", testSendMessageWithPendingConnectionReturnsNil),
+        ("testSendMessageAfterAcceptedConnectionReturnsThePersistedMessage", testSendMessageAfterAcceptedConnectionReturnsThePersistedMessage),
+        ("testSendMessageWorksInBothDirectionsAfterAcceptance", testSendMessageWorksInBothDirectionsAfterAcceptance),
+        // areConnected
+        ("testAreConnectedReturnsFalseBeforeAnyConnectionRequest", testAreConnectedReturnsFalseBeforeAnyConnectionRequest),
+        ("testAreConnectedReturnsFalseWhenConnectionIsPending", testAreConnectedReturnsFalseWhenConnectionIsPending),
+        ("testAreConnectedReturnsTrueAfterAcceptanceAndCheckIsSymmetric", testAreConnectedReturnsTrueAfterAcceptanceAndCheckIsSymmetric),
+        // sendConnectionRequest
+        ("testSendConnectionRequestCreatesAPendingConnection", testSendConnectionRequestCreatesAPendingConnection),
+        ("testSendConnectionRequestToSelfReturnsNil", testSendConnectionRequestToSelfReturnsNil),
+        ("testSendConnectionRequestWhenConnectionAlreadyExistsReturnsNil", testSendConnectionRequestWhenConnectionAlreadyExistsReturnsNil),
+        // acceptConnectionRequest
+        ("testAcceptConnectionRequestByRecipientMovesConnectionToAccepted", testAcceptConnectionRequestByRecipientMovesConnectionToAccepted),
+        ("testAcceptConnectionRequestByRequesterInsteadOfRecipientReturnsFalse", testAcceptConnectionRequestByRequesterInsteadOfRecipientReturnsFalse),
+        ("testAcceptConnectionRequestForUnknownConnectionIdReturnsFalse", testAcceptConnectionRequestForUnknownConnectionIdReturnsFalse),
+        ("testAcceptConnectionRequestOnAlreadyAcceptedConnectionReturnsFalse", testAcceptConnectionRequestOnAlreadyAcceptedConnectionReturnsFalse),
+        // AC#7: blocking integration
+        ("testSendConnectionRequestIsRejectedWhenRecipientHasBlockedRequester", testSendConnectionRequestIsRejectedWhenRecipientHasBlockedRequester),
+        ("testSendConnectionRequestIsRejectedWhenRequesterHasBlockedRecipient", testSendConnectionRequestIsRejectedWhenRequesterHasBlockedRecipient),
+        ("testSendMessageIsRejectedWhenRecipientHasBlockedSender", testSendMessageIsRejectedWhenRecipientHasBlockedSender),
+        // Message body validation
+        ("testSendMessageWithBlankBodyReturnsNil", testSendMessageWithBlankBodyReturnsNil),
+        ("testSendMessageWithBodyAtMaximumLengthIsAccepted", testSendMessageWithBodyAtMaximumLengthIsAccepted),
+        ("testSendMessageWithBodyOneCharacterOverMaximumLengthReturnsNil", testSendMessageWithBodyOneCharacterOverMaximumLengthReturnsNil),
+        // getMessages
+        ("testGetMessagesReturnsEmptyArrayBeforeAnyMessagesAreSent", testGetMessagesReturnsEmptyArrayBeforeAnyMessagesAreSent),
+        ("testGetMessagesReturnsAllMessagesBetweenTwoUsersInChronologicalOrder", testGetMessagesReturnsAllMessagesBetweenTwoUsersInChronologicalOrder),
+        ("testGetMessagesIsSymmetricSwappingArgumentOrderReturnsSameList", testGetMessagesIsSymmetricSwappingArgumentOrderReturnsSameList),
+        ("testGetMessagesDoesNotIncludeMessagesFromADifferentPair", testGetMessagesDoesNotIncludeMessagesFromADifferentPair),
+    ]
+}
+
 public func __allDiscoveredTests() -> [XCTestCaseEntry] {
     return [
         testCase(MatchScoreTests.__allTests),
         testCase(ProfileRepositoryTests.__allTests),
         testCase(DiscoveryTests.__allTests),
+        testCase(MessagingTests.__allTests),
     ]
 }
