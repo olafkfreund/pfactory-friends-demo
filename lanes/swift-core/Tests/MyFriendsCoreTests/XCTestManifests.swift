@@ -72,9 +72,28 @@ extension ProfileRepositoryTests {
     ]
 }
 
+// AC#4: discovery ordering and explanation
+extension DiscoveryTests {
+    static let __allTests = [
+        // ordered by score
+        ("testDiscoverReturnsCandidatesOrderedByScoreDescending", testDiscoverReturnsCandidatesOrderedByScoreDescending),
+        ("testDiscoverExcludesTheSearcherEvenWhenTheyHaveOpenToFriendsTrue", testDiscoverExcludesTheSearcherEvenWhenTheyHaveOpenToFriendsTrue),
+        ("testDiscoverExcludesProfilesWithOpenToFriendsFalse", testDiscoverExcludesProfilesWithOpenToFriendsFalse),
+        ("testDiscoverReturnsEmptyListWhenNoOpenProfilesExist", testDiscoverReturnsEmptyListWhenNoOpenProfilesExist),
+        // shows why each result was surfaced
+        ("testDiscoverPopulatesSharedInterestsWithTheSortedIntersectionOfInterestTags", testDiscoverPopulatesSharedInterestsWithTheSortedIntersectionOfInterestTags),
+        ("testDiscoverPopulatesSharedActivitiesWithTheSortedIntersectionOfActivityTags", testDiscoverPopulatesSharedActivitiesWithTheSortedIntersectionOfActivityTags),
+        ("testDiscoverReturnsEmptySharedInterestsAndActivitiesWhenThereIsNoOverlap", testDiscoverReturnsEmptySharedInterestsAndActivitiesWhenThereIsNoOverlap),
+        ("testDiscoverWithEmptySearcherInterestsStillReturnsOpenProfilesWithScoreZero", testDiscoverWithEmptySearcherInterestsStillReturnsOpenProfilesWithScoreZero),
+        ("testDiscoverScoreMatchesMatchScoreOutputForTheSameInputs", testDiscoverScoreMatchesMatchScoreOutputForTheSameInputs),
+        ("testDiscoverSearcherWithoutOpenToFriendsCanStillBrowseOpenProfiles", testDiscoverSearcherWithoutOpenToFriendsCanStillBrowseOpenProfiles),
+    ]
+}
+
 public func __allDiscoveredTests() -> [XCTestCaseEntry] {
     return [
         testCase(MatchScoreTests.__allTests),
         testCase(ProfileRepositoryTests.__allTests),
+        testCase(DiscoveryTests.__allTests),
     ]
 }
