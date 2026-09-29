@@ -141,6 +141,35 @@ extension MessagingTests {
     ]
 }
 
+// AC#9: offline snapshot store (own profile, accepted connections, loaded messages)
+extension OfflineCacheTests {
+    static let __allTests = [
+        // cacheProfile
+        ("testCacheProfileStoresAProfileAndGetCachedProfileReturnsIt", testCacheProfileStoresAProfileAndGetCachedProfileReturnsIt),
+        ("testGetCachedProfileReturnsNilWhenNoSnapshotIsStored", testGetCachedProfileReturnsNilWhenNoSnapshotIsStored),
+        ("testCacheProfileReplacesAnExistingSnapshotForTheSameId", testCacheProfileReplacesAnExistingSnapshotForTheSameId),
+        ("testCacheProfileWithABlankIdReturnsFalseAndStoresNothing", testCacheProfileWithABlankIdReturnsFalseAndStoresNothing),
+        // cacheConnections
+        ("testCacheConnectionsStoresAcceptedConnectionsAndGetCachedConnectionsReturnsThem", testCacheConnectionsStoresAcceptedConnectionsAndGetCachedConnectionsReturnsThem),
+        ("testGetCachedConnectionsReturnsAnEmptyArrayWhenNoSnapshotIsStored", testGetCachedConnectionsReturnsAnEmptyArrayWhenNoSnapshotIsStored),
+        ("testCacheConnectionsDropsPendingConnectionsAC9OfflineShowsOnlyAccepted", testCacheConnectionsDropsPendingConnectionsAC9OfflineShowsOnlyAccepted),
+        ("testCacheConnectionsWithABlankUserIdReturnsFalseAndStoresNothing", testCacheConnectionsWithABlankUserIdReturnsFalseAndStoresNothing),
+        ("testCacheConnectionsReplacesAnExistingSnapshotForTheSameUserId", testCacheConnectionsReplacesAnExistingSnapshotForTheSameUserId),
+        // cacheMessages
+        ("testCacheMessagesStoresMessagesAndGetCachedMessagesReturnsThem", testCacheMessagesStoresMessagesAndGetCachedMessagesReturnsThem),
+        ("testGetCachedMessagesReturnsAnEmptyArrayWhenNoSnapshotIsStoredForThatPair", testGetCachedMessagesReturnsAnEmptyArrayWhenNoSnapshotIsStoredForThatPair),
+        ("testGetCachedMessagesIsSymmetricSwappingUserIdAndPeerIdReturnsTheSameList", testGetCachedMessagesIsSymmetricSwappingUserIdAndPeerIdReturnsTheSameList),
+        ("testCacheMessagesWithABlankUserIdReturnsFalseAndStoresNothing", testCacheMessagesWithABlankUserIdReturnsFalseAndStoresNothing),
+        ("testCacheMessagesWithABlankPeerIdReturnsFalseAndStoresNothing", testCacheMessagesWithABlankPeerIdReturnsFalseAndStoresNothing),
+        ("testCacheMessagesReplacesAnExistingSnapshotForTheSamePair", testCacheMessagesReplacesAnExistingSnapshotForTheSamePair),
+        // clearForUser
+        ("testClearForUserRemovesTheCachedProfileForThatUser", testClearForUserRemovesTheCachedProfileForThatUser),
+        ("testClearForUserRemovesTheCachedConnectionsForThatUser", testClearForUserRemovesTheCachedConnectionsForThatUser),
+        ("testClearForUserRemovesCachedMessagesWhereTheUserIsAParticipant", testClearForUserRemovesCachedMessagesWhereTheUserIsAParticipant),
+        ("testClearForUserDoesNotRemoveDataForOtherUsers", testClearForUserDoesNotRemoveDataForOtherUsers),
+    ]
+}
+
 // AC#8: reporting a person or message
 extension ReportTests {
     static let __allTests = [
@@ -178,5 +207,6 @@ public func __allDiscoveredTests() -> [XCTestCaseEntry] {
         testCase(DiscoveryTests.__allTests),
         testCase(MessagingTests.__allTests),
         testCase(ReportTests.__allTests),
+        testCase(OfflineCacheTests.__allTests),
     ]
 }
