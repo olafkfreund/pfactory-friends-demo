@@ -8,6 +8,17 @@
  * [isComplete]). [biography] is optional: a profile can be created without one,
  * in which case it defaults to the empty string. [interests] and [activities]
  * are optional lists that default to empty.
+ *
+ * [age] is the person's self-reported age in whole years (AC#1). It is stored
+ * as entered; the domain layer enforces the minimum-age floor at save time
+ * (see [ProfileRepository.MIN_AGE]). [age] defaults to 18 (the primary
+ * audience per the product brief) so that callers that do not yet pass an
+ * explicit age still produce a valid profile; production callers must always
+ * supply a real age collected from the person.
+ *
+ * Age data is personal data. It is kept for as long as the account exists and
+ * deleted together with the profile on [ProfileRepository.deleteAccount]
+ * (constitution P1, enforceable).
  */
 data class Profile(
     val id: String,
@@ -16,6 +27,18 @@ data class Profile(
     val biography: String = "",
     val interests: List<String> = emptyList(),
     val activities: List<String> = emptyList(),
+    /**
+     * The person's self-reported age in whole years (AC#1).
+     *
+     * Must be at least [ProfileRepository.MIN_AGE] (16). The minimum covers
+     * the "Older teenagers aged 16 and 17" segment stated in the product
+     * brief and the age-assurance requirement in constitution P3 (enforceable).
+     *
+     * Collecting a birth date is not an age-assurance mechanism (P3). The
+     * age stored here is the self-reported value the domain layer can
+     * validate; a full assurance flow is a separate UI-layer concern.
+     */
+    val age: Int = 18,
     /**
      * Whether this person is currently open to meeting new friends.
      *
