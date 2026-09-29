@@ -1,0 +1,60 @@
+# Runs the swift-core lane's tests on every PR.
+#
+# The Swift lane is the platform complement to the Kotlin lane: both encode the
+# same business logic (constitution P9 — one definition, one set of tests), and
+# both must run in CI so that a change to the shared model is caught on either
+# platform.
+#
+# nixpkgs ships no libIndexStore.so (NixOS/nixpkgs#379859), so automatic SwiftPM
+# test discovery does not work in nix environments. This lane uses the pre-5.4
+# convention: LinuxMain.swift + XCTestManifests.swift. A test absent from the
+# manifest silently does not run; the assertion below catches that failure before
+# it can pass green — the same check the kotlin-core workflow applies to its
+# JUnit XML counts (see lanes/swift-core/NOTES.md).
+name: swift-core
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: swift-core (swift test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: lanes/swift-core
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '5.10'
+
+      - name: Run tests
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee swift-test-output.txt
+
+      # A green `swift test` that executed zero tests is indistinguishable from
+      # a real pass in the console output, so assert the count rather than
+      # trusting the exit code alone. A test not listed in XCTestManifests.swift
+      # will not appear in the "Executed N tests" summary line — this is the
+      # exact failure that NOTES.md warns against ("the only trace is the count").
+      - name: Assert tests actually ran
+        if: always()
+        run: |
+          count=$(grep -oE 'Executed [0-9]+ test' swift-test-output.txt \
+                  | grep -oE '[0-9]+' | head -1)
+          echo "executed ${count:-0} test(s)"
+          if [ "${count:-0}" -lt 1 ]; then
+            echo "::error::swift test reported ${count:-0} tests — check XCTestManifests.swift"; exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swift-core-test-output
+          path: lanes/swift-core/swift-test-output.txt
