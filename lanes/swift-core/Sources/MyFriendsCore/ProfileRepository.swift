@@ -151,7 +151,8 @@ public final class ProfileRepository {
             biography: trimmedBiography,
             interests: profile.interests,
             activities: profile.activities,
-            openToFriends: profile.openToFriends
+            openToFriends: profile.openToFriends,
+            location: profile.location
         )
     }
 
@@ -249,7 +250,8 @@ public final class ProfileRepository {
             biography: profile.biography,
             interests: profile.interests,
             activities: profile.activities,
-            openToFriends: profile.openToFriends
+            openToFriends: profile.openToFriends,
+            location: profile.location
         )
         return true
     }
@@ -267,6 +269,35 @@ public final class ProfileRepository {
         guard profiles[id] != nil else { return false }
         profiles[id]?.openToFriends = open
         return true
+    }
+
+    /// Returns open profiles within `radius` of `searcherLocation`, ordered
+    /// by `MatchScore` descending, excluding the searcher and their blocked
+    /// profiles.
+    ///
+    /// AC#3: discovery returns only people who currently have "open to new
+    /// friends" turned on and who are within the searching person's chosen
+    /// radius, which can be set to 1, 5, 10 or 25 kilometres.
+    ///
+    /// A candidate is excluded when their `Profile.location` is `nil` — a
+    /// profile without a known location cannot be placed within any radius.
+    ///
+    /// All other filters from `discover(searcher:)` (open-to-friends gate,
+    /// self-exclusion, block relationships) still apply before the distance
+    /// filter is evaluated.
+    ///
+    /// The same algorithm is in
+    /// `lanes/kotlin-core/src/main/kotlin/ProfileRepository.kt`
+    /// (constitution P9).
+    public func discover(
+        searcher: Profile,
+        near searcherLocation: GeoLocation,
+        within radius: SearchRadius
+    ) -> [DiscoveryResult] {
+        return discover(searcher: searcher).filter { result in
+            guard let candidateLoc = result.profile.location else { return false }
+            return searcherLocation.distance(to: candidateLoc) <= radius.rawValue
+        }
     }
 
     /// Returns all stored profiles whose `openToFriends` flag is true.

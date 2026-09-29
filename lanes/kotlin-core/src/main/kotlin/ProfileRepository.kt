@@ -255,6 +255,33 @@ class ProfileRepository {
     }
 
     /**
+     * Returns open profiles within [radius] of [searcherLocation], ordered by
+     * [MatchScore] descending, excluding the searcher and their blocked profiles.
+     *
+     * AC#3: discovery returns only people who currently have "open to new
+     * friends" turned on and who are within the searching person's chosen
+     * radius, which can be set to 1, 5, 10 or 25 kilometres.
+     *
+     * A candidate is excluded when their [Profile.location] is null — a
+     * profile without a known location cannot be placed within any radius.
+     *
+     * All other filters from [discover] (open-to-friends gate, self-exclusion,
+     * block relationships) still apply before the distance filter is evaluated.
+     *
+     * The same algorithm is in
+     * lanes/swift-core/Sources/MyFriendsCore/ProfileRepository.swift
+     * (constitution P9).
+     */
+    fun discover(
+        searcher: Profile,
+        searcherLocation: GeoLocation,
+        radius: SearchRadius,
+    ): List<DiscoveryResult> = discover(searcher).filter { result ->
+        val candidateLoc = result.profile.location ?: return@filter false
+        searcherLocation.distanceTo(candidateLoc) <= radius.kilometres
+    }
+
+    /**
      * Returns all stored profiles whose [Profile.openToFriends] flag is true.
      *
      * AC#2: discovery surfaces only people who have deliberately turned the

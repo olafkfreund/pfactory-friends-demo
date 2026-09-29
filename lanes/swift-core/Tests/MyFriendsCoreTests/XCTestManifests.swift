@@ -104,6 +104,12 @@ extension DiscoveryTests {
         ("testDiscoverWithEmptySearcherInterestsStillReturnsOpenProfilesWithScoreZero", testDiscoverWithEmptySearcherInterestsStillReturnsOpenProfilesWithScoreZero),
         ("testDiscoverScoreMatchesMatchScoreOutputForTheSameInputs", testDiscoverScoreMatchesMatchScoreOutputForTheSameInputs),
         ("testDiscoverSearcherWithoutOpenToFriendsCanStillBrowseOpenProfiles", testDiscoverSearcherWithoutOpenToFriendsCanStillBrowseOpenProfiles),
+        // AC#3: radius-based discovery
+        ("testDiscoverWithRadiusReturnsOnlyProfilesWithinThatRadius", testDiscoverWithRadiusReturnsOnlyProfilesWithinThatRadius),
+        ("testDiscoverWithRadiusExcludesProfilesWithoutALocation", testDiscoverWithRadiusExcludesProfilesWithoutALocation),
+        ("testDiscoverWithRadiusStillHonoursTheOpenToFriendsGate", testDiscoverWithRadiusStillHonoursTheOpenToFriendsGate),
+        ("testDiscoverWithRadiusResultsAreOrderedByScoreDescending", testDiscoverWithRadiusResultsAreOrderedByScoreDescending),
+        ("testDiscoverWithAllFourRadiusValuesUsesTheCorrectThresholds", testDiscoverWithAllFourRadiusValuesUsesTheCorrectThresholds),
     ]
 }
 

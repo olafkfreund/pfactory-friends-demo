@@ -275,4 +275,156 @@ class DiscoveryTest {
         assertEquals(1, results.size)
         assertEquals("ada", results[0].profile.id)
     }
+
+    // MARK: - AC#3: radius-based discovery
+    //
+    // Base location: lat=51.500, lon=-0.100 (central London, approx).
+    // Offsets (same longitude, haversine on latitude arc only):
+    //   +0.005° ≈  0.56 km  → inside 1 km, 5 km, 10 km, 25 km
+    //   +0.040° ≈  4.45 km  → inside 5 km, 10 km, 25 km; outside 1 km
+    //   +0.070° ≈  7.78 km  → inside 10 km, 25 km; outside 1 km, 5 km
+    //   +0.150° ≈ 16.68 km  → inside 25 km; outside 1 km, 5 km, 10 km
+    //   +0.300° ≈ 33.37 km  → outside all four radii
+
+    private val baseLocation = GeoLocation(lat = 51.500, lon = -0.100)
+
+    private fun locationAt(deltaLat: Double) = GeoLocation(lat = 51.500 + deltaLat, lon = -0.100)
+
+    @Test
+    fun `discover with radius returns only profiles within that radius`() {
+        // ada is ~0.56 km away, grace is ~4.45 km away.
+        // A 1 km radius should include only ada; a 5 km radius should include both.
+        val repository = ProfileRepository()
+        val searcher = Profile(id = "searcher", displayName = "Searcher", photo = validPhoto())
+        repository.save(
+            Profile(
+                id = "ada",
+                displayName = "Ada Lovelace",
+                photo = validPhoto(),
+                openToFriends = true,
+                location = locationAt(0.005),   // ~0.56 km
+            ),
+        )
+        repository.save(
+            Profile(
+                id = "grace",
+                displayName = "Grace Hopper",
+                photo = validPhoto(),
+                openToFriends = true,
+                location = locationAt(0.040),   // ~4.45 km
+            ),
+        )
+
+        val within1km = repository.discover(searcher, baseLocation, SearchRadius.ONE)
+        val within5km = repository.discover(searcher, baseLocation, SearchRadius.FIVE)
+
+        assertEquals(1, within1km.size)
+        assertEquals("ada", within1km[0].profile.id)
+        assertEquals(2, within5km.size)
+    }
+
+    @Test
+    fun `discover with radius excludes profiles without a location`() {
+        // A profile that has never reported its location cannot be placed within
+        // any radius and must be excluded from radius-filtered results.
+        val repository = ProfileRepository()
+        val searcher = Profile(id = "searcher", displayName = "Searcher", photo = validPhoto())
+        repository.save(
+            Profile(
+                id = "no-location",
+                displayName = "No Location",
+                photo = validPhoto(),
+                openToFriends = true,
+                // location deliberately omitted (defaults to null)
+            ),
+        )
+
+        val results = repository.discover(searcher, baseLocation, SearchRadius.TWENTY_FIVE)
+
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun `discover with radius still honours the openToFriends gate`() {
+        // A profile that is within the radius but has openToFriends=false must
+        // not appear in radius-filtered results.
+        val repository = ProfileRepository()
+        val searcher = Profile(id = "searcher", displayName = "Searcher", photo = validPhoto())
+        repository.save(
+            Profile(
+                id = "closed",
+                displayName = "Closed Profile",
+                photo = validPhoto(),
+                openToFriends = false,          // flag is off
+                location = locationAt(0.005),   // well within any radius
+            ),
+        )
+
+        val results = repository.discover(searcher, baseLocation, SearchRadius.TWENTY_FIVE)
+
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun `discover with radius results are ordered by score descending`() {
+        // Two profiles within the radius; higher-scoring one must come first.
+        val repository = ProfileRepository()
+        val searcher = Profile(
+            id = "searcher",
+            displayName = "Searcher",
+            photo = validPhoto(),
+            interests = listOf("jazz", "climbing"),
+        )
+        // grace shares both interests → score 1.0
+        repository.save(
+            Profile(
+                id = "grace",
+                displayName = "Grace Hopper",
+                photo = validPhoto(),
+                interests = listOf("jazz", "climbing"),
+                openToFriends = true,
+                location = locationAt(0.005),   // ~0.56 km
+            ),
+        )
+        // ada shares only jazz → score 0.5
+        repository.save(
+            Profile(
+                id = "ada",
+                displayName = "Ada Lovelace",
+                photo = validPhoto(),
+                interests = listOf("jazz"),
+                openToFriends = true,
+                location = locationAt(0.040),   // ~4.45 km
+            ),
+        )
+
+        val results = repository.discover(searcher, baseLocation, SearchRadius.TEN)
+
+        assertEquals(2, results.size)
+        assertEquals("grace", results[0].profile.id)
+        assertEquals(1.0, results[0].score)
+        assertEquals("ada", results[1].profile.id)
+        assertEquals(0.5, results[1].score)
+    }
+
+    @Test
+    fun `discover with all four radius values uses the correct thresholds`() {
+        // One profile per zone; each radius value should include exactly the
+        // profiles within it.
+        //   ~0.56 km → within all four radii
+        //   ~4.45 km → within 5 km, 10 km, 25 km; outside 1 km
+        //   ~7.78 km → within 10 km, 25 km; outside 1 km, 5 km
+        //  ~16.68 km → within 25 km; outside 1 km, 5 km, 10 km
+        val repository = ProfileRepository()
+        val searcher = Profile(id = "searcher", displayName = "Searcher", photo = validPhoto())
+        repository.save(Profile(id = "p1", displayName = "P1", photo = validPhoto(), openToFriends = true, location = locationAt(0.005)))
+        repository.save(Profile(id = "p2", displayName = "P2", photo = validPhoto(), openToFriends = true, location = locationAt(0.040)))
+        repository.save(Profile(id = "p3", displayName = "P3", photo = validPhoto(), openToFriends = true, location = locationAt(0.070)))
+        repository.save(Profile(id = "p4", displayName = "P4", photo = validPhoto(), openToFriends = true, location = locationAt(0.150)))
+
+        assertEquals(1, repository.discover(searcher, baseLocation, SearchRadius.ONE).size)
+        assertEquals(2, repository.discover(searcher, baseLocation, SearchRadius.FIVE).size)
+        assertEquals(3, repository.discover(searcher, baseLocation, SearchRadius.TEN).size)
+        assertEquals(4, repository.discover(searcher, baseLocation, SearchRadius.TWENTY_FIVE).size)
+    }
 }
