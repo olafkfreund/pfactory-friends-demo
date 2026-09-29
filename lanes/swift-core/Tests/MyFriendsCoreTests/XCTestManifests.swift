@@ -200,6 +200,23 @@ extension ReportTests {
     ]
 }
 
+// AC#7 (blocking) + AC#8 (reporting): moderation outcome is independent of blocks
+extension BlockModerationTests {
+    static let __allTests = [
+        // AC#7 part 1: a person can block multiple users
+        ("testBlockUserRecordsTheBlockSoIsBlockedReturnsTrueForTheSamePair", testBlockUserRecordsTheBlockSoIsBlockedReturnsTrueForTheSamePair),
+        ("testAPersonCanBlockMultipleUsersAndAllBlocksAreIndependentlyRecorded", testAPersonCanBlockMultipleUsersAndAllBlocksAreIndependentlyRecorded),
+        // AC#8 + AC#7: moderation outcome is independent of blocks
+        ("testAReportIsAcceptedWhenTheReporterHasBlockedTheReportedPerson", testAReportIsAcceptedWhenTheReporterHasBlockedTheReportedPerson),
+        ("testAReportIsAcceptedWhenTheReportedPersonHasBlockedTheReporter", testAReportIsAcceptedWhenTheReportedPersonHasBlockedTheReporter),
+        ("testAReportIsAcceptedWhenBothPartiesHaveMutuallyBlockedEachOther", testAReportIsAcceptedWhenBothPartiesHaveMutuallyBlockedEachOther),
+        ("testGetReportsAgainstReturnsReportsRegardlessOfAnyBlockBetweenTheParties", testGetReportsAgainstReturnsReportsRegardlessOfAnyBlockBetweenTheParties),
+        ("testGetReportsAgainstIsNotAffectedByTheReportedPersonHavingBlockedReporters", testGetReportsAgainstIsNotAffectedByTheReportedPersonHavingBlockedReporters),
+        ("testAReportFiledBeforeABlockIsEstablishedRemainsVisibleToModeratorsAfterTheBlock", testAReportFiledBeforeABlockIsEstablishedRemainsVisibleToModeratorsAfterTheBlock),
+        ("testBlockStateBetweenReporterAndTargetDoesNotAffectReportsFiledAboutMessages", testBlockStateBetweenReporterAndTargetDoesNotAffectReportsFiledAboutMessages),
+    ]
+}
+
 public func __allDiscoveredTests() -> [XCTestCaseEntry] {
     return [
         testCase(MatchScoreTests.__allTests),
@@ -208,5 +225,6 @@ public func __allDiscoveredTests() -> [XCTestCaseEntry] {
         testCase(MessagingTests.__allTests),
         testCase(ReportTests.__allTests),
         testCase(OfflineCacheTests.__allTests),
+        testCase(BlockModerationTests.__allTests),
     ]
 }
