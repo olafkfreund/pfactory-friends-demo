@@ -31,6 +31,7 @@ extension ProfileRepositoryTests {
         ("testADisplayNameContainingANewlineThrowsAndPersistsNothing", testADisplayNameContainingANewlineThrowsAndPersistsNothing),
         ("testADisplayNameContainingACarriageReturnThrowsAndPersistsNothing", testADisplayNameContainingACarriageReturnThrowsAndPersistsNothing),
         ("testADisplayNameIsStoredWithoutItsSurroundingWhitespace", testADisplayNameIsStoredWithoutItsSurroundingWhitespace),
+        ("testAPaddedNameAtTheLimitIsStoredWithinTheLimit", testAPaddedNameAtTheLimitIsStoredWithinTheLimit),
         ("testADisplayNameOf50SimpleEmojiAtTheMaximumLengthIsAccepted", testADisplayNameOf50SimpleEmojiAtTheMaximumLengthIsAccepted),
         ("testADisplayNameOf51SimpleEmojiOverTheMaximumLengthThrows", testADisplayNameOf51SimpleEmojiOverTheMaximumLengthThrows),
         // Update semantics
@@ -38,6 +39,7 @@ extension ProfileRepositoryTests {
         // deleteAccount
         ("testDeleteAccountRemovesTheStoredProfileSoALaterFindReturnsNil", testDeleteAccountRemovesTheStoredProfileSoALaterFindReturnsNil),
         ("testDeleteAccountOnAnUnknownIdReturnsFalseWithoutThrowing", testDeleteAccountOnAnUnknownIdReturnsFalseWithoutThrowing),
+        ("testDeleteAccountRemovesTheProfileIncludingItsBiography", testDeleteAccountRemovesTheProfileIncludingItsBiography),
         // biography validation
         ("testSavingABiographyWithinTheLimitPersistsTheTrimmedValue", testSavingABiographyWithinTheLimitPersistsTheTrimmedValue),
         ("testABiographyOneCharacterOverTheMaximumLengthThrowsAndPersistsNothing", testABiographyOneCharacterOverTheMaximumLengthThrowsAndPersistsNothing),
@@ -49,10 +51,15 @@ extension ProfileRepositoryTests {
         ("testAPhotoExactlyAtTheMaximumSizeIsAccepted", testAPhotoExactlyAtTheMaximumSizeIsAccepted),
         ("testReplacingAnExistingPhotoWithANewValidPhotoPerisistsTheNewPhoto", testReplacingAnExistingPhotoWithANewValidPhotoPerisistsTheNewPhoto),
         ("testAttemptingToReplaceAnExistingPhotoWithAnInvalidNewPhotoLeavesTheOriginalPhotoIntact", testAttemptingToReplaceAnExistingPhotoWithAnInvalidNewPhotoLeavesTheOriginalPhotoIntact),
+        ("testDeleteAccountRemovesTheProfileIncludingItsPhoto", testDeleteAccountRemovesTheProfileIncludingItsPhoto),
+        ("testACPROF01301SavingAProfileWithAllMandatoryFieldsValidSucceedsAndReadsBackTheSameData", testACPROF01301SavingAProfileWithAllMandatoryFieldsValidSucceedsAndReadsBackTheSameData),
+        ("testACPROF01301SavingAProfileWithAnInvalidMandatoryFieldThrowsAndFindReturnsNil", testACPROF01301SavingAProfileWithAnInvalidMandatoryFieldThrowsAndFindReturnsNil),
         // interests / activities
         ("testInterestsAndActivitiesExactlyAtTheirLimitsAreAccepted", testInterestsAndActivitiesExactlyAtTheirLimitsAreAccepted),
         ("testInterestsOneEntryOverTheMaximumCountThrowsAndPersistsNothing", testInterestsOneEntryOverTheMaximumCountThrowsAndPersistsNothing),
         ("testActivitiesOneEntryOverTheMaximumCountThrowsAndPersistsNothing", testActivitiesOneEntryOverTheMaximumCountThrowsAndPersistsNothing),
+        ("testAnAtLimitInterestsListIsAcceptedAlongsideAnOverLimitActivitiesListBeingRejected", testAnAtLimitInterestsListIsAcceptedAlongsideAnOverLimitActivitiesListBeingRejected),
+        ("testAnAtLimitActivitiesListIsAcceptedAlongsideAnOverLimitInterestsListBeingRejected", testAnAtLimitActivitiesListIsAcceptedAlongsideAnOverLimitInterestsListBeingRejected),
         // isComplete
         ("testAFreshlyCreatedProfileWithAPhotoIsComplete", testAFreshlyCreatedProfileWithAPhotoIsComplete),
         // removePhoto

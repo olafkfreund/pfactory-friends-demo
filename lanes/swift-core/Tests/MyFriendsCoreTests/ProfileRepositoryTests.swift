@@ -115,6 +115,21 @@ final class ProfileRepositoryTests: XCTestCase {
         XCTAssertEqual(repository.find(id: "user-1")?.displayName, "Ada Lovelace")
     }
 
+    func testAPaddedNameAtTheLimitIsStoredWithinTheLimit() {
+        // A name padded with surrounding whitespace is trimmed before the length
+        // check, so a name that is exactly at the limit after trimming must be
+        // accepted and stored at the limit — not rejected because the padded
+        // form is longer.
+        let repository = ProfileRepository()
+        let padded = "  " + String(repeating: "a", count: ProfileRepository.maxDisplayNameLength) + "  "
+        try! repository.save(Profile(id: "user-1", displayName: padded, photo: validPhoto()))
+
+        XCTAssertEqual(
+            repository.find(id: "user-1")?.displayName.unicodeScalars.count,
+            ProfileRepository.maxDisplayNameLength
+        )
+    }
+
     func testADisplayNameOf50SimpleEmojiAtTheMaximumLengthIsAccepted() {
         // With length measured in Unicode scalar values, 50 single-scalar emoji
         // is exactly the limit — the same fix as the Kotlin lane (issue #36,
@@ -163,6 +178,23 @@ final class ProfileRepositoryTests: XCTestCase {
         let repository = ProfileRepository()
 
         XCTAssertFalse(repository.deleteAccount(id: "never-saved"))
+    }
+
+    func testDeleteAccountRemovesTheProfileIncludingItsBiography() {
+        // P2 (enforceable): account deletion removes all associated data,
+        // including the biography, in the same call.
+        let repository = ProfileRepository()
+        try! repository.save(
+            Profile(
+                id: "user-1",
+                displayName: "Ada Lovelace",
+                photo: validPhoto(),
+                biography: "Mathematician and first programmer."
+            )
+        )
+
+        XCTAssertTrue(repository.deleteAccount(id: "user-1"))
+        XCTAssertNil(repository.find(id: "user-1"))
     }
 
     // MARK: - biography validation
@@ -301,6 +333,48 @@ final class ProfileRepositoryTests: XCTestCase {
         XCTAssertEqual(found?.bytes, originalBytes)
     }
 
+    func testDeleteAccountRemovesTheProfileIncludingItsPhoto() {
+        // P2 (enforceable): account deletion removes all associated data,
+        // including the stored photo, in the same call.
+        let repository = ProfileRepository()
+        try! repository.save(Profile(id: "user-1", displayName: "Ada Lovelace", photo: validPhoto()))
+
+        XCTAssertTrue(repository.deleteAccount(id: "user-1"))
+        XCTAssertNil(repository.find(id: "user-1"))
+    }
+
+    func testACPROF01301SavingAProfileWithAllMandatoryFieldsValidSucceedsAndReadsBackTheSameData() {
+        // AC-PROF-013-01: with both mandatory fields valid (displayName and
+        // photo), save() returns normally — the repository-layer signal that the
+        // profile was saved — and an independent find() reads back the same data.
+        let repository = ProfileRepository()
+        let bytes: [UInt8] = [4, 3, 2, 1]
+        try! repository.save(
+            Profile(id: "user-1", displayName: "Ada Lovelace", photo: validPhoto(bytes: bytes, format: "png"))
+        )
+
+        let found = repository.find(id: "user-1")
+        XCTAssertEqual(found?.displayName, "Ada Lovelace")
+        XCTAssertEqual(found?.photo?.format, "png")
+        XCTAssertEqual(found?.photo?.bytes, bytes)
+    }
+
+    func testACPROF01301SavingAProfileWithAnInvalidMandatoryFieldThrowsAndFindReturnsNil() {
+        // AC-PROF-013-01 (negative): a mandatory field that fails validation —
+        // here the mandatory photo carries an unsupported format — makes save()
+        // throw before anything is stored, so a later find() returns nil.
+        let repository = ProfileRepository()
+
+        XCTAssertThrowsError(
+            try repository.save(
+                Profile(id: "user-1", displayName: "Ada Lovelace", photo: validPhoto(format: "gif"))
+            )
+        ) { error in
+            XCTAssertEqual(error as? ProfileRepositoryError, .unsupportedPhotoFormat)
+        }
+        XCTAssertNil(repository.find(id: "user-1"))
+    }
+
     // MARK: - interests / activities limits
 
     func testInterestsAndActivitiesExactlyAtTheirLimitsAreAccepted() {
@@ -346,6 +420,54 @@ final class ProfileRepositoryTests: XCTestCase {
             )
         ) { error in
             XCTAssertEqual(error as? ProfileRepositoryError, .tooManyActivities)
+        }
+        XCTAssertNil(repository.find(id: "user-1"))
+    }
+
+    func testAnAtLimitInterestsListIsAcceptedAlongsideAnOverLimitActivitiesListBeingRejected() {
+        // AC-PROF-021-01: the two limits are enforced independently. A list at
+        // the interests limit does not excuse an over-limit activities list, and
+        // the activities failure is what rejects the save — nothing is stored.
+        let repository = ProfileRepository()
+        let interestsAtLimit = (0..<ProfileRepository.maxInterests).map { "interest-\($0)" }
+        let activitiesOverLimit = (0...ProfileRepository.maxActivities).map { "activity-\($0)" }
+
+        XCTAssertThrowsError(
+            try repository.save(
+                Profile(
+                    id: "user-1",
+                    displayName: "Ada Lovelace",
+                    photo: validPhoto(),
+                    interests: interestsAtLimit,
+                    activities: activitiesOverLimit
+                )
+            )
+        ) { error in
+            XCTAssertEqual(error as? ProfileRepositoryError, .tooManyActivities)
+        }
+        XCTAssertNil(repository.find(id: "user-1"))
+    }
+
+    func testAnAtLimitActivitiesListIsAcceptedAlongsideAnOverLimitInterestsListBeingRejected() {
+        // AC-PROF-021-01: the mirror case — a list at the activities limit does
+        // not excuse an over-limit interests list, confirming each count is
+        // checked on its own field and nothing is stored.
+        let repository = ProfileRepository()
+        let interestsOverLimit = (0...ProfileRepository.maxInterests).map { "interest-\($0)" }
+        let activitiesAtLimit = (0..<ProfileRepository.maxActivities).map { "activity-\($0)" }
+
+        XCTAssertThrowsError(
+            try repository.save(
+                Profile(
+                    id: "user-1",
+                    displayName: "Ada Lovelace",
+                    photo: validPhoto(),
+                    interests: interestsOverLimit,
+                    activities: activitiesAtLimit
+                )
+            )
+        ) { error in
+            XCTAssertEqual(error as? ProfileRepositoryError, .tooManyInterests)
         }
         XCTAssertNil(repository.find(id: "user-1"))
     }
