@@ -200,16 +200,17 @@ class ProfileRepositoryTest {
         val repository = ProfileRepository()
         val tooLong = "a".repeat(ProfileRepository.MAX_BIOGRAPHY_LENGTH + 1)
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(
-                Profile(
-                    id = "user-1",
-                    displayName = "Ada Lovelace",
-                    photo = validPhoto(),
-                    biography = tooLong,
-                ),
-            )
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(
+                    Profile(
+                        id = "user-1",
+                        displayName = "Ada Lovelace",
+                        photo = validPhoto(),
+                        biography = tooLong,
+                    ),
+                )
+            }
         assertTrue(error.message?.contains(ProfileRepository.MAX_BIOGRAPHY_LENGTH.toString()) == true)
         assertNull(repository.find("user-1"))
     }
@@ -263,9 +264,10 @@ class ProfileRepositoryTest {
         // the error names at least one supported format.
         val repository = ProfileRepository()
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(format = "gif")))
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(format = "gif")))
+            }
         assertTrue(ProfileRepository.SUPPORTED_PHOTO_FORMATS.any { error.message?.contains(it) == true })
         assertNull(repository.find("user-1"))
     }
@@ -277,9 +279,10 @@ class ProfileRepositoryTest {
         val repository = ProfileRepository()
         val tooBig = ByteArray(ProfileRepository.MAX_PHOTO_SIZE_BYTES + 1)
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = tooBig)))
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = tooBig)))
+            }
         assertTrue(error.message?.contains(ProfileRepository.MAX_PHOTO_SIZE_BYTES.toString()) == true)
         assertNull(repository.find("user-1"))
     }
@@ -292,7 +295,14 @@ class ProfileRepositoryTest {
             Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(bytes = maxBytes)),
         )
 
-        assertEquals(ProfileRepository.MAX_PHOTO_SIZE_BYTES, repository.find("user-1")?.photo?.bytes?.size)
+        assertEquals(
+            ProfileRepository.MAX_PHOTO_SIZE_BYTES,
+            repository
+                .find("user-1")
+                ?.photo
+                ?.bytes
+                ?.size,
+        )
     }
 
     @Test
@@ -428,16 +438,17 @@ class ProfileRepositoryTest {
         val repository = ProfileRepository()
         val tooMany = List(ProfileRepository.MAX_INTERESTS + 1) { "interest-$it" }
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(
-                Profile(
-                    id = "user-1",
-                    displayName = "Ada Lovelace",
-                    photo = validPhoto(),
-                    interests = tooMany,
-                ),
-            )
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(
+                    Profile(
+                        id = "user-1",
+                        displayName = "Ada Lovelace",
+                        photo = validPhoto(),
+                        interests = tooMany,
+                    ),
+                )
+            }
         assertTrue(error.message?.contains(ProfileRepository.MAX_INTERESTS.toString()) == true)
         assertNull(repository.find("user-1"))
     }
@@ -449,16 +460,17 @@ class ProfileRepositoryTest {
         val repository = ProfileRepository()
         val tooMany = List(ProfileRepository.MAX_ACTIVITIES + 1) { "activity-$it" }
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(
-                Profile(
-                    id = "user-1",
-                    displayName = "Ada Lovelace",
-                    photo = validPhoto(),
-                    activities = tooMany,
-                ),
-            )
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(
+                    Profile(
+                        id = "user-1",
+                        displayName = "Ada Lovelace",
+                        photo = validPhoto(),
+                        activities = tooMany,
+                    ),
+                )
+            }
         assertTrue(error.message?.contains(ProfileRepository.MAX_ACTIVITIES.toString()) == true)
         assertNull(repository.find("user-1"))
     }
@@ -472,19 +484,221 @@ class ProfileRepositoryTest {
         val interestsAtLimit = List(ProfileRepository.MAX_INTERESTS) { "interest-$it" }
         val activitiesOverLimit = List(ProfileRepository.MAX_ACTIVITIES + 1) { "activity-$it" }
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(
-                Profile(
-                    id = "user-1",
-                    displayName = "Ada Lovelace",
-                    photo = validPhoto(),
-                    interests = interestsAtLimit,
-                    activities = activitiesOverLimit,
-                ),
-            )
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(
+                    Profile(
+                        id = "user-1",
+                        displayName = "Ada Lovelace",
+                        photo = validPhoto(),
+                        interests = interestsAtLimit,
+                        activities = activitiesOverLimit,
+                    ),
+                )
+            }
         assertTrue(error.message?.contains(ProfileRepository.MAX_ACTIVITIES.toString()) == true)
         assertNull(repository.find("user-1"))
+    }
+
+    // AC#2: open-to-friends toggle
+
+    @Test
+    fun `a freshly saved profile has openToFriends false by default`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertFalse(repository.find("user-1")?.openToFriends == true)
+    }
+
+    @Test
+    fun `setOpenToFriends true marks the profile as open and returns true`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertTrue(repository.setOpenToFriends("user-1", true))
+        assertTrue(repository.find("user-1")?.openToFriends == true)
+    }
+
+    @Test
+    fun `setOpenToFriends false marks the profile as closed and returns true`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), openToFriends = true))
+
+        assertTrue(repository.setOpenToFriends("user-1", false))
+        assertFalse(repository.find("user-1")?.openToFriends == true)
+    }
+
+    @Test
+    fun `setOpenToFriends on an unknown id returns false without throwing`() {
+        val repository = ProfileRepository()
+
+        assertFalse(repository.setOpenToFriends("never-saved", true))
+    }
+
+    @Test
+    fun `findOpen returns only profiles with openToFriends true`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+        repository.setOpenToFriends("user-1", true)
+
+        val open = repository.findOpen()
+        assertEquals(1, open.size)
+        assertEquals("user-1", open.first().id)
+    }
+
+    @Test
+    fun `findOpen excludes a profile after its flag is turned off`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.setOpenToFriends("user-1", true)
+
+        assertTrue(repository.findOpen().any { it.id == "user-1" })
+
+        repository.setOpenToFriends("user-1", false)
+
+        assertTrue(repository.findOpen().none { it.id == "user-1" })
+    }
+
+    @Test
+    fun `findOpen returns an empty list when no profiles are open`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertEquals(emptyList(), repository.findOpen())
+    }
+
+    @Test
+    fun `a profile saved with openToFriends true appears in findOpen immediately`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), openToFriends = true))
+
+        val open = repository.findOpen()
+        assertEquals(1, open.size)
+        assertEquals("user-1", open.first().id)
+    }
+
+    @Test
+    fun `findOpen returns all open profiles when multiple exist`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+        repository.save(Profile(id = "user-3", displayName = "Alan Turing", photo = validPhoto()))
+        repository.setOpenToFriends("user-1", true)
+        repository.setOpenToFriends("user-2", true)
+
+        val open = repository.findOpen()
+        assertEquals(2, open.size)
+        assertTrue(open.any { it.id == "user-1" })
+        assertTrue(open.any { it.id == "user-2" })
+        assertTrue(open.none { it.id == "user-3" })
+    }
+
+    // AC#7: block user
+
+    @Test
+    fun `blockUser returns true when both profiles exist`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+
+        assertTrue(repository.blockUser(blockerId = "user-1", blockedId = "user-2"))
+    }
+
+    @Test
+    fun `blockUser returns false when the blocker does not exist`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+
+        assertFalse(repository.blockUser(blockerId = "unknown", blockedId = "user-2"))
+    }
+
+    @Test
+    fun `blockUser returns false when the blocked user does not exist`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+
+        assertFalse(repository.blockUser(blockerId = "user-1", blockedId = "unknown"))
+    }
+
+    @Test
+    fun `blockUser is idempotent — blocking the same person twice still returns true`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+        repository.blockUser(blockerId = "user-1", blockedId = "user-2")
+
+        assertTrue(repository.blockUser(blockerId = "user-1", blockedId = "user-2"))
+    }
+
+    @Test
+    fun `isBlocked returns true after a user is blocked`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+        repository.blockUser(blockerId = "user-1", blockedId = "user-2")
+
+        assertTrue(repository.isBlocked(blockerId = "user-1", blockedId = "user-2"))
+    }
+
+    @Test
+    fun `isBlocked returns false before any block is recorded`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+
+        assertFalse(repository.isBlocked(blockerId = "user-1", blockedId = "user-2"))
+    }
+
+    @Test
+    fun `isBlocked is directional — blocking A to B does not block B to A`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto()))
+        repository.save(Profile(id = "user-2", displayName = "Grace Hopper", photo = validPhoto()))
+        repository.blockUser(blockerId = "user-1", blockedId = "user-2")
+
+        assertFalse(repository.isBlocked(blockerId = "user-2", blockedId = "user-1"))
+    }
+
+    @Test
+    fun `discover excludes a profile that the searcher has blocked`() {
+        // AC#7: a blocked person never appears in the blocker's discovery results.
+        val repository = ProfileRepository()
+        val searcher = Profile(id = "searcher", displayName = "Searcher", photo = validPhoto())
+        repository.save(searcher)
+        repository.save(
+            Profile(id = "blocked", displayName = "Blocked Person", photo = validPhoto(), openToFriends = true),
+        )
+        repository.blockUser(blockerId = "searcher", blockedId = "blocked")
+
+        val results = repository.discover(searcher)
+
+        assertTrue(results.none { it.profile.id == "blocked" })
+    }
+
+    @Test
+    fun `discover still returns other open profiles when one is blocked`() {
+        val repository = ProfileRepository()
+        val searcher =
+            Profile(
+                id = "searcher",
+                displayName = "Searcher",
+                photo = validPhoto(),
+                interests = listOf("jazz"),
+            )
+        repository.save(searcher)
+        repository.save(
+            Profile(id = "ada", displayName = "Ada Lovelace", photo = validPhoto(), interests = listOf("jazz"), openToFriends = true),
+        )
+        repository.save(
+            Profile(id = "grace", displayName = "Grace Hopper", photo = validPhoto(), interests = listOf("jazz"), openToFriends = true),
+        )
+        repository.blockUser(blockerId = "searcher", blockedId = "ada")
+
+        val results = repository.discover(searcher)
+
+        assertEquals(1, results.size)
+        assertEquals("grace", results[0].profile.id)
     }
 
     @Test
@@ -496,17 +710,18 @@ class ProfileRepositoryTest {
         val interestsOverLimit = List(ProfileRepository.MAX_INTERESTS + 1) { "interest-$it" }
         val activitiesAtLimit = List(ProfileRepository.MAX_ACTIVITIES) { "activity-$it" }
 
-        val error = assertFailsWith<IllegalArgumentException> {
-            repository.save(
-                Profile(
-                    id = "user-1",
-                    displayName = "Ada Lovelace",
-                    photo = validPhoto(),
-                    interests = interestsOverLimit,
-                    activities = activitiesAtLimit,
-                ),
-            )
-        }
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(
+                    Profile(
+                        id = "user-1",
+                        displayName = "Ada Lovelace",
+                        photo = validPhoto(),
+                        interests = interestsOverLimit,
+                        activities = activitiesAtLimit,
+                    ),
+                )
+            }
         assertTrue(error.message?.contains(ProfileRepository.MAX_INTERESTS.toString()) == true)
         assertNull(repository.find("user-1"))
     }
@@ -547,5 +762,66 @@ class ProfileRepositoryTest {
         val repository = ProfileRepository()
 
         assertFalse(repository.removePhoto("never-saved"))
+    }
+
+    // AC#1 / constitution P3: age field and minimum-age enforcement
+
+    @Test
+    fun `a profile with the minimum age is accepted`() {
+        // AC#1: the profile carries an age. MIN_AGE (16) is the lowest accepted
+        // value, reflecting that the brief includes 16- and 17-year-olds.
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = ProfileRepository.MIN_AGE))
+
+        assertEquals(ProfileRepository.MIN_AGE, repository.find("user-1")?.age)
+    }
+
+    @Test
+    fun `a profile age below the minimum throws and persists nothing`() {
+        // Constitution P3 (enforceable): any feature reachable by someone under
+        // 18 must state its age-assurance mechanism. The domain-layer floor
+        // rejects anyone below MIN_AGE (16) before anything is stored.
+        val repository = ProfileRepository()
+
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                repository.save(
+                    Profile(
+                        id = "user-1",
+                        displayName = "Ada Lovelace",
+                        photo = validPhoto(),
+                        age =
+                            ProfileRepository.MIN_AGE - 1,
+                    ),
+                )
+            }
+        assertTrue(error.message?.contains(ProfileRepository.MIN_AGE.toString()) == true)
+        assertNull(repository.find("user-1"))
+    }
+
+    @Test
+    fun `a profile at age 17 is accepted as a valid minor above the minimum`() {
+        // The brief names 16-and-17-year-olds as a user segment. Both are
+        // above MIN_AGE (16) and must be accepted.
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = 17))
+
+        assertEquals(17, repository.find("user-1")?.age)
+    }
+
+    @Test
+    fun `a profile at age 18 is accepted as an adult`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = 18))
+
+        assertEquals(18, repository.find("user-1")?.age)
+    }
+
+    @Test
+    fun `age is stored and reads back the same value`() {
+        val repository = ProfileRepository()
+        repository.save(Profile(id = "user-1", displayName = "Ada Lovelace", photo = validPhoto(), age = 25))
+
+        assertEquals(25, repository.find("user-1")?.age)
     }
 }

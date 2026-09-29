@@ -1,0 +1,62 @@
+# Runs the swift-core lane's tests on every PR.
+#
+# The Swift lane is the platform complement to the Kotlin lane: both encode the
+# same business logic (constitution P9 — one definition, one set of tests), and
+# both must run in CI so that a change to the shared model is caught on either
+# platform.
+#
+# nixpkgs ships no libIndexStore.so (NixOS/nixpkgs#379859), so automatic SwiftPM
+# test discovery does not work in nix environments. This lane uses the pre-5.4
+# convention: LinuxMain.swift + XCTestManifests.swift. A test absent from the
+# manifest silently does not run; the assertion below catches that failure before
+# it can pass green — the same check the kotlin-core workflow applies to its
+# JUnit XML counts (see lanes/swift-core/NOTES.md).
+name: swift-core
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: swift-core (swift test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: lanes/swift-core
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '5.10'
+
+      - name: Run tests
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee swift-test-output.txt
+
+      # A green `swift test` that executed fewer tests than expected is
+      # indistinguishable from a full pass in the console output.  NOTES.md
+      # calls this out explicitly: "the only trace is the count" — a test
+      # omitted from XCTestManifests.swift silently does not run and the suite
+      # still exits zero.  We therefore count the manifest entries and compare
+      # them against the executed count, not just check that some tests ran.
+      - name: Assert all tests ran
+        if: always()
+        run: |
+          expected=$(grep -c '"test' Tests/MyFriendsCoreTests/XCTestManifests.swift)
+          count=$(grep -oE 'Executed [0-9]+ test' swift-test-output.txt \
+                  | grep -oE '[0-9]+' | head -1)
+          echo "expected $expected test(s); executed ${count:-0}"
+          if [ "${count:-0}" -ne "$expected" ]; then
+            echo "::error::executed ${count:-0} tests but XCTestManifests.swift lists $expected — a test is missing from the manifest or did not run"; exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swift-core-test-output
+          path: lanes/swift-core/swift-test-output.txt

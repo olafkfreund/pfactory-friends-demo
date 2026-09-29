@@ -16,8 +16,18 @@
  * non-durable store; it is enough to prove the save/find/delete round-trip.
  */
 class ProfileRepository {
-
     private val profiles: MutableMap<String, Profile> = mutableMapOf()
+
+    /**
+     * Tracks which profiles a given user has blocked.
+     * Key: blocker id. Value: set of blocked ids.
+     *
+     * Per constitution P5: every person-to-person surface ships with blocking
+     * in the same phase. This is the domain-layer record; enforcement at the
+     * messaging/request layers is a higher-level concern outside this
+     * in-process repository.
+     */
+    private val blockedBy: MutableMap<String, MutableSet<String>> = mutableMapOf()
 
     /**
      * Persists [profile], overwriting any existing record with the same id
@@ -103,17 +113,29 @@ class ProfileRepository {
         // one is present. An absent photo is stored as null, leaving the profile
         // incomplete rather than being rejected.
         val photo = profile.photo
-        val normalizedPhoto = if (photo != null) {
-            val normalizedPhotoFormat = photo.format.trim().lowercase()
-            require(normalizedPhotoFormat in SUPPORTED_PHOTO_FORMATS) {
-                "photo format must be one of ${SUPPORTED_PHOTO_FORMATS.joinToString(", ")}"
+        val normalizedPhoto =
+            if (photo != null) {
+                val normalizedPhotoFormat = photo.format.trim().lowercase()
+                require(normalizedPhotoFormat in SUPPORTED_PHOTO_FORMATS) {
+                    "photo format must be one of ${SUPPORTED_PHOTO_FORMATS.joinToString(", ")}"
+                }
+                require(photo.bytes.size <= MAX_PHOTO_SIZE_BYTES) {
+                    "photo must be at most $MAX_PHOTO_SIZE_BYTES bytes"
+                }
+                photo.copy(format = normalizedPhotoFormat)
+            } else {
+                null
             }
-            require(photo.bytes.size <= MAX_PHOTO_SIZE_BYTES) {
-                "photo must be at most $MAX_PHOTO_SIZE_BYTES bytes"
-            }
-            photo.copy(format = normalizedPhotoFormat)
-        } else {
-            null
+        // Age assurance, per constitution P3 (enforceable): any feature
+        // reachable by someone under 18 must state its age-assurance mechanism
+        // and what changes for a minor. The domain-layer floor is MIN_AGE (16),
+        // reflecting that the brief explicitly includes 16- and 17-year-olds.
+        // Collecting a birth date is not an age-assurance mechanism (P3): the
+        // full assurance flow lives in the UI layer; this check is the
+        // domain-layer guard that prevents a profile below the minimum age from
+        // ever reaching storage.
+        require(profile.age >= MIN_AGE) {
+            "age must be at least $MIN_AGE"
         }
         require(profile.interests.size <= MAX_INTERESTS) {
             "interests must be at most $MAX_INTERESTS entries"
@@ -126,11 +148,106 @@ class ProfileRepository {
         // characters and kept as 7, and a name padded to the limit persisted
         // over it. The same rule applies to the biography and to the photo
         // format, which is kept in its normalized form.
-        profiles[profile.id] = profile.copy(
-            displayName = trimmed,
-            biography = trimmedBiography,
-            photo = normalizedPhoto,
-        )
+        profiles[profile.id] =
+            profile.copy(
+                displayName = trimmed,
+                biography = trimmedBiography,
+                photo = normalizedPhoto,
+            )
+    }
+
+    /**
+     * Records that [blockerId] has blocked [blockedId]. A blocked profile is
+     * excluded from the blocker's discovery results (AC#7).
+     *
+     * Returns true if the block was recorded. Returns false if either
+     * [blockerId] or [blockedId] is not in the repository — you can only
+     * block a profile that exists. Blocking is idempotent: calling with the
+     * same pair a second time still returns true without adding a duplicate.
+     *
+     * Per constitution P5 (enforceable): any person-to-person surface ships
+     * with blocking in the same phase as the feature that creates the data.
+     */
+    fun blockUser(
+        blockerId: String,
+        blockedId: String,
+    ): Boolean {
+        if (!profiles.containsKey(blockerId)) return false
+        if (!profiles.containsKey(blockedId)) return false
+        blockedBy.getOrPut(blockerId) { mutableSetOf() }.add(blockedId)
+        return true
+    }
+
+    /**
+     * Returns true if [blockerId] has blocked [blockedId].
+     *
+     * The relationship is directional: A blocking B does not mean B has
+     * blocked A.
+     */
+    fun isBlocked(
+        blockerId: String,
+        blockedId: String,
+    ): Boolean = blockedBy[blockerId]?.contains(blockedId) == true
+
+    /**
+     * Returns all open profiles as [DiscoveryResult]s, sorted by [MatchScore]
+     * descending, excluding the searcher themselves.
+     *
+     * AC#4: discovery results are ordered by the match score computed from
+     * shared interest tags and overlapping activities. Each result also carries
+     * the shared interests and activities that produced the score, so the
+     * caller can show the person why each result was surfaced.
+     *
+     * The searcher does not need [Profile.openToFriends] set: they are
+     * browsing, not being browsed. Only the candidates need the flag.
+     *
+     * Profiles with equal scores preserve stable insertion order
+     * (`sortedByDescending` is a stable sort in Kotlin).
+     *
+     * Age-bracket isolation, per constitution P3 (enforceable): any feature
+     * reachable by someone under 18 must state what changes for a minor.
+     * Discovery is age-isolated: a searcher whose age is below [MIN_ADULT_AGE]
+     * (a minor) only sees other minor profiles; a searcher at or above
+     * [MIN_ADULT_AGE] only sees adult profiles. This prevents cross-cohort
+     * exposure without blocking either age group from the feature. The bracket
+     * boundary is [MIN_ADULT_AGE] (18), following the standard legal definition
+     * of adulthood in the UK, EU and US — the launch markets per the plan.
+     * (docs/product-decisions.md §16+ records this as a known gap; this commit
+     * closes the domain-layer part of it.)
+     *
+     * The same algorithm is in lanes/swift-core/Sources/MyFriendsCore/ProfileRepository.swift
+     * (constitution P9).
+     */
+    fun discover(searcher: Profile): List<DiscoveryResult> {
+        val myInterests = searcher.interests.toSet()
+        val myActivities = searcher.activities.toSet()
+        val myBlocked = blockedBy[searcher.id] ?: emptySet()
+        val isSearcherMinor = searcher.age < MIN_ADULT_AGE
+        return profiles.values
+            .filter {
+                it.openToFriends &&
+                    it.id != searcher.id &&
+                    it.id !in myBlocked &&
+                    // Age-bracket isolation (constitution P3): a minor searcher
+                    // sees only minor candidates; an adult searcher sees only adults.
+                    (it.age < MIN_ADULT_AGE) == isSearcherMinor
+            }.map { candidate ->
+                val theirInterests = candidate.interests.toSet()
+                val theirActivities = candidate.activities.toSet()
+                val score =
+                    MatchScore.score(
+                        myInterests = myInterests,
+                        theirInterests = theirInterests,
+                        myAvailability = myActivities,
+                        theirAvailability = theirActivities,
+                    )
+                DiscoveryResult(
+                    profile = candidate,
+                    score = score,
+                    sharedInterests = myInterests.intersect(theirInterests).sorted(),
+                    sharedActivities = myActivities.intersect(theirActivities).sorted(),
+                )
+            }.sortedByDescending { it.score }
     }
 
     /** Returns the stored [Profile] for [id], or null if none exists. */
@@ -154,6 +271,64 @@ class ProfileRepository {
         profiles[id] = profile.copy(photo = null)
         return true
     }
+
+    /**
+     * Sets the [Profile.openToFriends] flag for the profile with [id] to [open].
+     * Returns true if the profile was found and updated; returns false (rather
+     * than throwing) when the id was never stored.
+     *
+     * AC#2: turning the flag off removes the person from every other person's
+     * discovery results immediately at this layer (see [findOpen]). The
+     * one-minute SLA in AC#2 is an infrastructure concern (cache TTL or
+     * push-propagation latency) outside the scope of this in-process
+     * repository.
+     */
+    fun setOpenToFriends(
+        id: String,
+        open: Boolean,
+    ): Boolean {
+        val profile = profiles[id] ?: return false
+        profiles[id] = profile.copy(openToFriends = open)
+        return true
+    }
+
+    /**
+     * Returns open profiles within [radius] of [searcherLocation], ordered by
+     * [MatchScore] descending, excluding the searcher and their blocked profiles.
+     *
+     * AC#3: discovery returns only people who currently have "open to new
+     * friends" turned on and who are within the searching person's chosen
+     * radius, which can be set to 1, 5, 10 or 25 kilometres.
+     *
+     * A candidate is excluded when their [Profile.location] is null — a
+     * profile without a known location cannot be placed within any radius.
+     *
+     * All other filters from [discover] (open-to-friends gate, self-exclusion,
+     * block relationships) still apply before the distance filter is evaluated.
+     *
+     * The same algorithm is in
+     * lanes/swift-core/Sources/MyFriendsCore/ProfileRepository.swift
+     * (constitution P9).
+     */
+    fun discover(
+        searcher: Profile,
+        searcherLocation: GeoLocation,
+        radius: SearchRadius,
+    ): List<DiscoveryResult> =
+        discover(searcher).filter { result ->
+            val candidateLoc = result.profile.location ?: return@filter false
+            searcherLocation.distanceTo(candidateLoc) <= radius.kilometres
+        }
+
+    /**
+     * Returns all stored profiles whose [Profile.openToFriends] flag is true.
+     *
+     * AC#2: discovery surfaces only people who have deliberately turned the
+     * flag on. This is the domain-layer gate; the SLA that the change
+     * propagates within one minute is an infrastructure concern handled
+     * outside this repository.
+     */
+    fun findOpen(): List<Profile> = profiles.values.filter { it.openToFriends }
 
     companion object {
         /**
@@ -262,5 +437,48 @@ class ProfileRepository {
          * per-entry length or content rule implied here.
          */
         const val MAX_ACTIVITIES: Int = 10
+
+        /**
+         * Minimum allowed age for a profile, in whole years.
+         *
+         * Set to 16 because the product brief explicitly includes "Older
+         * teenagers aged 16 and 17" as a named user segment. Anyone younger
+         * than 16 is outside the stated target and must not be stored.
+         *
+         * Constitution P3 (enforceable): any feature reachable by someone
+         * under 18 must state its age-assurance mechanism and what changes for
+         * a minor. Collecting a birth date is not an age-assurance mechanism.
+         * This constant is the domain-layer floor; a full assurance flow (e.g.
+         * date-of-birth collection with a third-party verification step) is a
+         * UI-layer concern and is deliberately out of scope for this
+         * in-process repository.
+         *
+         * The same constant is declared in the Swift lane as `minAge`
+         * (constitution P9).
+         */
+        const val MIN_AGE: Int = 16
+
+        /**
+         * The age at which a user is considered an adult for discovery
+         * age-bracket isolation purposes.
+         *
+         * Users whose [Profile.age] is below this value are minors (16–17);
+         * users at or above it are adults (18+). Discovery is age-isolated:
+         * minors only see other minors, adults only see other adults. This is
+         * the domain-layer implementation of the "what changes for a minor"
+         * requirement from constitution P3 (enforceable).
+         *
+         * Set to 18, the standard legal adulthood threshold in the UK, EU and
+         * US — the three launch markets named in the plan.
+         *
+         * docs/product-decisions.md §16+ documents this isolation as a known
+         * gap: "under-18 accounts defaulting geolocation and matching-profiling
+         * to off". This constant and the [discover] filter are the
+         * domain-layer part of that closure.
+         *
+         * The same constant is declared in the Swift lane as `minAdultAge`
+         * (constitution P9).
+         */
+        const val MIN_ADULT_AGE: Int = 18
     }
 }

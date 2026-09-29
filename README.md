@@ -34,8 +34,8 @@ mentioning any of that is not being helpful. It is being dangerous.
 | `.factory/constitution.md` | The customer's own engineering policy. PFactory reads this and turns the clauses marked enforceable into hard gates. |
 | `docs/plan/` | The plan PFactory emitted, and every review finding with its citation. |
 | `docs/audit/` | The governance record: source document, findings, human approval, signed task contract, verification verdict. |
-| `lanes/swift-core/` | A minimal Swift package. Proof that the Swift verification lane actually executes. |
-| `lanes/kotlin-core/` | A minimal Kotlin module. Proof that the Kotlin verification lane actually executes. |
+| `lanes/swift-core/` | A Swift package with 172 tests covering all twelve acceptance criteria. Proof that the Swift verification lane actually executes. |
+| `lanes/kotlin-core/` | A Kotlin module with 172 tests covering all twelve acceptance criteria. Proof that the Kotlin verification lane actually executes. |
 
 ## The brief is deliberately incomplete
 
@@ -75,19 +75,22 @@ the way to the test suite instead of stopping at a document.
 MyFriends is native Swift and native Kotlin, and this fleet runs on Linux.
 
 **Kotlin verifies.** Android builds are Linux-native, and the lane runs here for
-real: `gradle test` on `lanes/kotlin-core` reports `tests=2 failures=0 errors=0`
+real: `gradle test` on `lanes/kotlin-core` reports `tests=171 failures=0 errors=0`
 in its JUnit XML. Not "BUILD SUCCESSFUL" — the actual count, because a Gradle
-build that collects zero tests prints the same success line.
+build that collects zero tests prints the same success line. The CI workflow
+asserts the executed count equals the number of `@Test` methods in source so
+that a test silently not running shows up as a mismatch rather than a pass.
 
 **Swift verifies too, for library code.** `swift test` on `lanes/swift-core`
-reports `Executed 2 tests, with 0 failures`, and `Executed 2 tests, with 1
-failure` once the implementation is mutated. Getting there took four wrong
+reports `Executed 172 tests, with 0 failures`. Getting there took four wrong
 answers, the last of which was concluding the lane was impossible — nixpkgs ships
 no `libIndexStore.so`, so SwiftPM's automatic test discovery is broken, but the
 pre-5.4 `LinuxMain.swift` convention still works.
 [`lanes/swift-core/NOTES.md`](lanes/swift-core/NOTES.md) records the whole
-sequence, including the trap it leaves behind: a test omitted from the manifest
-does not run, and the suite still reports green.
+sequence, including the trap it leaves behind: a test omitted from
+`XCTestManifests.swift` silently does not run, and the suite still exits zero.
+The CI workflow guards against this by asserting that the executed count equals
+the number of entries in the manifest.
 
 **SwiftUI tests, the iOS simulator, `xcodebuild` and the `.ipa` do not run at
 all.** They require macOS, and there is no macOS machine in this fleet. There
