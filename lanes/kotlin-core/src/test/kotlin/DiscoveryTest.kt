@@ -427,4 +427,119 @@ class DiscoveryTest {
         assertEquals(3, repository.discover(searcher, baseLocation, SearchRadius.TEN).size)
         assertEquals(4, repository.discover(searcher, baseLocation, SearchRadius.TWENTY_FIVE).size)
     }
+
+    // MARK: - AC#1 / constitution P3: age-bracket isolation in discovery
+
+    @Test
+    fun `discover excludes adult candidates from a minor searcher`() {
+        // A 17-year-old searcher must not see 18+ profiles in their results.
+        // Constitution P3 (enforceable): discovery is age-isolated so that
+        // minors (age < MIN_ADULT_AGE) are never surfaced to adults and vice
+        // versa.
+        val repository = ProfileRepository()
+        val searcher = Profile(
+            id = "minor-searcher",
+            displayName = "Minor Searcher",
+            photo = validPhoto(),
+            age = 17,
+            interests = listOf("jazz"),
+        )
+        repository.save(
+            Profile(
+                id = "adult",
+                displayName = "Adult User",
+                photo = validPhoto(),
+                age = ProfileRepository.MIN_ADULT_AGE,
+                interests = listOf("jazz"),
+                openToFriends = true,
+            ),
+        )
+
+        val results = repository.discover(searcher)
+
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun `discover excludes minor candidates from an adult searcher`() {
+        // An 18-year-old searcher must not see under-18 profiles in their results.
+        val repository = ProfileRepository()
+        val searcher = Profile(
+            id = "adult-searcher",
+            displayName = "Adult Searcher",
+            photo = validPhoto(),
+            age = ProfileRepository.MIN_ADULT_AGE,
+            interests = listOf("jazz"),
+        )
+        repository.save(
+            Profile(
+                id = "minor",
+                displayName = "Minor User",
+                photo = validPhoto(),
+                age = 17,
+                interests = listOf("jazz"),
+                openToFriends = true,
+            ),
+        )
+
+        val results = repository.discover(searcher)
+
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun `discover shows minor candidates to a minor searcher`() {
+        // A 16-year-old sees other under-18 profiles (both are minors).
+        val repository = ProfileRepository()
+        val searcher = Profile(
+            id = "minor-16",
+            displayName = "Minor 16",
+            photo = validPhoto(),
+            age = 16,
+            interests = listOf("jazz"),
+        )
+        repository.save(
+            Profile(
+                id = "minor-17",
+                displayName = "Minor 17",
+                photo = validPhoto(),
+                age = 17,
+                interests = listOf("jazz"),
+                openToFriends = true,
+            ),
+        )
+
+        val results = repository.discover(searcher)
+
+        assertEquals(1, results.size)
+        assertEquals("minor-17", results[0].profile.id)
+    }
+
+    @Test
+    fun `discover shows adult candidates to an adult searcher`() {
+        // An 18-year-old sees other 18+ profiles (both are adults).
+        val repository = ProfileRepository()
+        val searcher = Profile(
+            id = "adult-18",
+            displayName = "Adult 18",
+            photo = validPhoto(),
+            age = ProfileRepository.MIN_ADULT_AGE,
+            interests = listOf("jazz"),
+        )
+        repository.save(
+            Profile(
+                id = "adult-25",
+                displayName = "Adult 25",
+                photo = validPhoto(),
+                age = 25,
+                interests = listOf("jazz"),
+                openToFriends = true,
+            ),
+        )
+
+        val results = repository.discover(searcher)
+
+        assertEquals(1, results.size)
+        assertEquals("adult-25", results[0].profile.id)
+    }
 }

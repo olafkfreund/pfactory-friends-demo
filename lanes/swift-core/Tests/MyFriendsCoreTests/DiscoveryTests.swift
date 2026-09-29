@@ -380,4 +380,106 @@ final class DiscoveryTests: XCTestCase {
         XCTAssertEqual(repository.discover(searcher: searcher, near: baseLocation, within: .ten).count, 3)
         XCTAssertEqual(repository.discover(searcher: searcher, near: baseLocation, within: .twentyFive).count, 4)
     }
+
+    // MARK: - AC#1 / constitution P3: age-bracket isolation in discovery
+
+    func testDiscoverExcludesAdultCandidatesFromAMinorSearcher() {
+        // A 17-year-old searcher must not see 18+ profiles in their results.
+        // Constitution P3 (enforceable): discovery is age-isolated so that
+        // minors (age < minAdultAge) are never surfaced to adults and vice versa.
+        let repository = ProfileRepository()
+        let searcher = Profile(
+            id: "minor-searcher",
+            displayName: "Minor Searcher",
+            photo: validPhoto(),
+            interests: ["jazz"],
+            age: 17
+        )
+        try! repository.save(Profile(
+            id: "adult",
+            displayName: "Adult User",
+            photo: validPhoto(),
+            interests: ["jazz"],
+            openToFriends: true,
+            age: ProfileRepository.minAdultAge
+        ))
+
+        let results = repository.discover(searcher: searcher)
+
+        XCTAssertTrue(results.isEmpty)
+    }
+
+    func testDiscoverExcludesMinorCandidatesFromAnAdultSearcher() {
+        // An 18-year-old searcher must not see under-18 profiles in their results.
+        let repository = ProfileRepository()
+        let searcher = Profile(
+            id: "adult-searcher",
+            displayName: "Adult Searcher",
+            photo: validPhoto(),
+            interests: ["jazz"],
+            age: ProfileRepository.minAdultAge
+        )
+        try! repository.save(Profile(
+            id: "minor",
+            displayName: "Minor User",
+            photo: validPhoto(),
+            interests: ["jazz"],
+            openToFriends: true,
+            age: 17
+        ))
+
+        let results = repository.discover(searcher: searcher)
+
+        XCTAssertTrue(results.isEmpty)
+    }
+
+    func testDiscoverShowsMinorCandidatesToAMinorSearcher() {
+        // A 16-year-old sees other under-18 profiles (both are minors).
+        let repository = ProfileRepository()
+        let searcher = Profile(
+            id: "minor-16",
+            displayName: "Minor 16",
+            photo: validPhoto(),
+            interests: ["jazz"],
+            age: 16
+        )
+        try! repository.save(Profile(
+            id: "minor-17",
+            displayName: "Minor 17",
+            photo: validPhoto(),
+            interests: ["jazz"],
+            openToFriends: true,
+            age: 17
+        ))
+
+        let results = repository.discover(searcher: searcher)
+
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results[0].profile.id, "minor-17")
+    }
+
+    func testDiscoverShowsAdultCandidatesToAnAdultSearcher() {
+        // An 18-year-old sees other 18+ profiles (both are adults).
+        let repository = ProfileRepository()
+        let searcher = Profile(
+            id: "adult-18",
+            displayName: "Adult 18",
+            photo: validPhoto(),
+            interests: ["jazz"],
+            age: ProfileRepository.minAdultAge
+        )
+        try! repository.save(Profile(
+            id: "adult-25",
+            displayName: "Adult 25",
+            photo: validPhoto(),
+            interests: ["jazz"],
+            openToFriends: true,
+            age: 25
+        ))
+
+        let results = repository.discover(searcher: searcher)
+
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results[0].profile.id, "adult-25")
+    }
 }
