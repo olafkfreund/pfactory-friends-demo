@@ -92,10 +92,41 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: '1'
 
+  containerise:
+    name: kotlin-core (containerise)
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: lanes/kotlin-core
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Assemble JAR
+        run: gradle assemble --no-daemon
+
+      - name: Build container image
+        run: docker build -t kotlin-core:${{ github.sha }} .
+
+      - name: Scan container image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: kotlin-core:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
   deploy:
     name: kotlin-core (deploy)
     runs-on: ubuntu-latest
-    needs: [test, lint, security-scan]
+    needs: [test, lint, security-scan, containerise]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: production
     timeout-minutes: 20
