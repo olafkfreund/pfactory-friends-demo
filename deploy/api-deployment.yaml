@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myfriends-api
+  namespace: factory
+  labels:
+    app: myfriends-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myfriends-api
+  template:
+    metadata:
+      labels:
+        app: myfriends-api
+    spec:
+      containers:
+        - name: api
+          image: myfriends-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: myfriends-api
+  namespace: factory
+spec:
+  selector:
+    app: myfriends-api
+  ports:
+    - port: 8000
+      targetPort: 8000
