@@ -357,12 +357,20 @@ def accept_connection(connection_id: str, acceptor_id: str) -> ConnectionOut:
 
 @app.post("/messages", status_code=status.HTTP_201_CREATED, response_model=MessageOut)
 def send_message(body: MessageIn) -> MessageOut:
-    """Send a message (AC#6, AC#7)."""
+    """Send a message (AC#9, AC#7).
+
+    Refused with a machine-readable reason when the connection is in any state
+    other than ACCEPTED:
+    - "not_connected": no connection exists between sender and recipient.
+    - "connection_pending": a connection exists but has not yet been accepted.
+    - "blocked": one party has blocked the other.
+    """
     msg, reason = _messages.send(body.sender_id, body.recipient_id, body.body)
     if msg is None:
         code = {
             "blocked": status.HTTP_403_FORBIDDEN,
             "not_connected": status.HTTP_403_FORBIDDEN,
+            "connection_pending": status.HTTP_403_FORBIDDEN,
         }.get(reason or "", status.HTTP_422_UNPROCESSABLE_ENTITY)
         raise HTTPException(status_code=code, detail=reason)
     return MessageOut(

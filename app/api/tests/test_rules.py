@@ -315,13 +315,26 @@ class TestMessaging:
         assert reason is None
 
     def test_message_before_connection_refused(self) -> None:
-        """Messaging is refused when no accepted connection exists (AC#6)."""
+        """Messaging is refused when no accepted connection exists (AC#9)."""
         store = ProfileStore()
         cs = ConnectionStore(store)
         ms = MessageStore(store, cs)
         msg, reason = ms.send("alice", "bob", "hello")
         assert msg is None
         assert reason == "not_connected"
+
+    def test_message_with_pending_connection_refused(self) -> None:
+        """Messaging is refused with 'connection_pending' when a request exists but is not yet accepted (AC#9)."""
+        store = ProfileStore()
+        cs = ConnectionStore(store)
+        ms = MessageStore(store, cs)
+        # Send a connection request but do NOT accept it.
+        conn, err = cs.send_request("alice", "bob")
+        assert conn is not None
+        assert err is None
+        msg, reason = ms.send("alice", "bob", "hello")
+        assert msg is None
+        assert reason == "connection_pending"
 
     def test_blocked_prevents_messaging_by_blocker(self) -> None:
         """A user cannot message someone they have blocked (AC#7)."""

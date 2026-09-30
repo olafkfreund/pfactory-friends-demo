@@ -296,6 +296,11 @@ class ConnectionStore:
         conn = self._connections.get(conn_id)
         return conn is not None and conn.status == ConnectionStatus.ACCEPTED
 
+    def get_connection_between(self, user1: str, user2: str) -> Connection | None:
+        """Return the connection between user1 and user2, regardless of status."""
+        conn_id = self._canonical_id(user1, user2)
+        return self._connections.get(conn_id)
+
     def get_connection(self, connection_id: str) -> Connection | None:
         return self._connections.get(connection_id)
 
@@ -323,14 +328,20 @@ class MessageStore:
         """Return (message, None) on success, (None, reason) on refusal.
 
         Refusal reasons match DomainOutcome.kt:
-        - "not_connected": no accepted connection between sender and recipient.
+        - "not_connected": no connection exists between sender and recipient.
+        - "connection_pending": a connection exists but has not been accepted yet (AC#9).
         - "blocked": one party has blocked the other.
         - "blank_body": body is blank or whitespace-only.
         - "body_too_long": body exceeds MAX_MESSAGE_LENGTH.
         """
-        # AC#6: the pair must hold an ACCEPTED connection.
-        if not self._connection_store.are_connected(sender_id, recipient_id):
+        # AC#9: the pair must hold an ACCEPTED connection.
+        # Distinguish between no connection and a pending connection so the
+        # client can show the correct machine-readable reason for each state.
+        existing = self._connection_store.get_connection_between(sender_id, recipient_id)
+        if existing is None:
             return None, "not_connected"
+        if existing.status != ConnectionStatus.ACCEPTED:
+            return None, "connection_pending"
         # Single may_contact predicate — same check as discovery and requests.
         if not may_contact(self._profile_store, sender_id, recipient_id):
             return None, "blocked"
