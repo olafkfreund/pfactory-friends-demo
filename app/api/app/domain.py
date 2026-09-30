@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Optional
 
 
 class AgeBracket(str, Enum):
@@ -82,6 +83,20 @@ class ReviewQueueStatus(str, Enum):
     """
 
     ACCEPTED = "accepted"  # initial state: report received, awaiting review
+    RESOLVED = "resolved"  # report resolved with an outcome (AC#13)
+
+
+class ReportResolutionOutcome(str, Enum):
+    """The three permitted outcomes when a moderator resolves a report (AC#13).
+
+    Exactly these three values are accepted; any other value is refused.
+
+    Ported from lanes/kotlin-core/src/main/kotlin/ReportResolution.kt.
+    """
+
+    NO_ACTION = "no_action"          # no action taken against the reported person
+    WARNING = "warning"              # a warning issued to the reported person
+    CONTACT_REMOVAL = "contact_removal"  # reported person loses ability to contact others
 
 
 VALID_SEARCH_RADII: frozenset[int] = frozenset({1, 5, 10, 25})  # kilometres (AC#3)
@@ -205,3 +220,5 @@ class Report:
     queue_status: ReviewQueueStatus = field(
         default=ReviewQueueStatus.ACCEPTED
     )  # AC#12: enters queue in accepted state
+    resolution_outcome: Optional[ReportResolutionOutcome] = None  # AC#13: set on resolution
+    resolved_at: Optional[float] = None  # AC#13: epoch-seconds timestamp recorded at resolution

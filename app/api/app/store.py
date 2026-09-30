@@ -28,6 +28,7 @@ from .domain import (
     Profile,
     Report,
     ReportReason,
+    ReportResolutionOutcome,
     ReportTargetKind,
     ReviewQueueStatus,
     age_bracket,
@@ -433,6 +434,34 @@ class ReportStore:
         immediate_harm to sort harm-flagged reports to the front.
         """
         return sorted(self._reports, key=lambda r: (not r.immediate_harm, self._reports.index(r)))
+
+    def find(self, report_id: str) -> Report | None:
+        """Return a report by its id, or None if not found."""
+        return next((r for r in self._reports if r.id == report_id), None)
+
+    def resolve(
+        self,
+        report_id: str,
+        outcome: ReportResolutionOutcome,
+    ) -> tuple[Report | None, str | None]:
+        """Resolve a report with one of the three permitted outcomes (AC#13).
+
+        Records the outcome and the resolution timestamp on the report.
+        Returns (resolved_report, None) on success, (None, reason) on refusal.
+
+        Refusal reasons:
+        - "not_found": no report with this id exists.
+        - "already_resolved": the report has already been resolved.
+        """
+        report = self.find(report_id)
+        if report is None:
+            return None, "not_found"
+        if report.queue_status == ReviewQueueStatus.RESOLVED:
+            return None, "already_resolved"
+        report.queue_status = ReviewQueueStatus.RESOLVED
+        report.resolution_outcome = outcome
+        report.resolved_at = time.time()
+        return report, None
 
     def get_reports_against(self, target_id: str) -> list[Report]:
         return [r for r in self._reports if r.target_id == target_id]

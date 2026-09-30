@@ -25,6 +25,7 @@ from .domain import (
     Profile,
     Report,
     ReportReason,
+    ReportResolutionOutcome,
     ReportTargetKind,
 )
 from .store import (
@@ -119,7 +120,19 @@ class ReportOut(BaseModel):
     reason: str
     additional_text: str
     immediate_harm: bool  # AC#12
-    queue_status: str  # AC#12: always "accepted" on creation
+    queue_status: str  # AC#12: "accepted" on creation; "resolved" after resolution (AC#13)
+    resolution_outcome: str | None = None  # AC#13: set when resolved
+    resolved_at: float | None = None  # AC#13: epoch-seconds timestamp of resolution
+
+
+class ResolveReportIn(BaseModel):
+    """Request body for resolving a report (AC#13).
+
+    Exactly three outcomes are accepted: no_action, warning, contact_removal.
+    Any other value is refused before storage.
+    """
+
+    outcome: ReportResolutionOutcome
 
 
 class DiscoveryResultOut(BaseModel):
@@ -434,6 +447,10 @@ def _report_out(report: Report) -> ReportOut:
         additional_text=report.additional_text,
         immediate_harm=report.immediate_harm,
         queue_status=report.queue_status.value,
+        resolution_outcome=(
+            report.resolution_outcome.value if report.resolution_outcome is not None else None
+        ),
+        resolved_at=report.resolved_at,
     )
 
 
@@ -470,3 +487,30 @@ def get_review_queue() -> list[ReportOut]:
     All reports are in the 'accepted' state on entry.
     """
     return [_report_out(r) for r in _reports.get_queue()]
+
+
+@app.post("/reports/{report_id}/resolve", response_model=ReportOut)
+def resolve_report(report_id: str, body: ResolveReportIn) -> ReportOut:
+    """Resolve a report with one of the three permitted outcomes (AC#13).
+
+    Accepted outcomes: no_action, warning, contact_removal.
+    Any other value is rejected (Pydantic validation refuses it before this
+    handler runs, so only the three enum values ever reach the store).
+
+    On success, records the outcome and the resolution timestamp on the report
+    and returns the updated report.  The report moves from queue_status
+    'accepted' to 'resolved'.
+
+    Refusals:
+    - 404 when no report with report_id exists.
+    - 409 when the report has already been resolved (idempotent resolution is
+      not permitted; a resolved report is immutable).
+    """
+    report, reason = _reports.resolve(report_id, body.outcome)
+    if report is None:
+        code = {
+            "not_found": status.HTTP_404_NOT_FOUND,
+            "already_resolved": status.HTTP_409_CONFLICT,
+        }.get(reason or "", status.HTTP_422_UNPROCESSABLE_ENTITY)
+        raise HTTPException(status_code=code, detail=reason)
+    return _report_out(report)
