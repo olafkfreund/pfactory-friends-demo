@@ -152,3 +152,112 @@ def test_turning_on_adds_to_discovery() -> None:
     assert resp2.status_code == 200
     ids2 = [r["profile"]["id"] for r in resp2.json()]
     assert "candidate-c6b" in ids2
+
+
+# ---------------------------------------------------------------------------
+# C8 — Connection requests with rolling 24-hour rate limit
+# ---------------------------------------------------------------------------
+
+
+def test_c8_send_connection_request_success() -> None:
+    """POST /connections creates a pending connection (C8)."""
+    _make_profile(client, "c8-req", age=25)
+    _make_profile(client, "c8-rec", age=26)
+    resp = client.post("/connections?requester_id=c8-req&recipient_id=c8-rec")
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["requester_id"] == "c8-req"
+    assert body["recipient_id"] == "c8-rec"
+    assert body["status"] == "pending"
+
+
+def test_c8_self_request_refused() -> None:
+    """Cannot send a connection request to yourself (C8)."""
+    _make_profile(client, "c8-self", age=25)
+    resp = client.post("/connections?requester_id=c8-self&recipient_id=c8-self")
+    assert resp.status_code == 422
+    assert "self_request" in resp.json()["detail"]
+
+
+def test_c8_duplicate_request_refused() -> None:
+    """A duplicate connection request for the same pair is refused (C8)."""
+    _make_profile(client, "c8-dup-req", age=25)
+    _make_profile(client, "c8-dup-rec", age=26)
+    client.post("/connections?requester_id=c8-dup-req&recipient_id=c8-dup-rec")
+    resp = client.post("/connections?requester_id=c8-dup-req&recipient_id=c8-dup-rec")
+    assert resp.status_code == 422
+    assert "already_exists" in resp.json()["detail"]
+
+
+def test_c8_blocked_pair_request_refused() -> None:
+    """A person cannot send a connection request to someone they blocked (C8)."""
+    _make_profile(client, "c8-blk-a", age=25)
+    _make_profile(client, "c8-blk-b", age=26)
+    client.post("/blocks", json={"blocker_id": "c8-blk-a", "blocked_id": "c8-blk-b"})
+    resp = client.post("/connections?requester_id=c8-blk-a&recipient_id=c8-blk-b")
+    assert resp.status_code == 403
+    assert "blocked" in resp.json()["detail"]
+
+
+def test_c8_blocked_pair_reverse_request_refused() -> None:
+    """The blocked person also cannot send a connection request back (C8, bidirectional)."""
+    _make_profile(client, "c8-blk-c", age=25)
+    _make_profile(client, "c8-blk-d", age=26)
+    # c blocks d
+    client.post("/blocks", json={"blocker_id": "c8-blk-c", "blocked_id": "c8-blk-d"})
+    # d tries to request c — bidirectional block check must refuse
+    resp = client.post("/connections?requester_id=c8-blk-d&recipient_id=c8-blk-c")
+    assert resp.status_code == 403
+    assert "blocked" in resp.json()["detail"]
+
+
+def test_c8_rate_limit_twenty_requests_per_rolling_window() -> None:
+    """At most 20 connection requests per 24-hour rolling window, 21st returns 429 (C8)."""
+    _make_profile(client, "c8-rl-req", age=25)
+    for i in range(20):
+        _make_profile(client, f"c8-rl-rec-{i}", age=26)
+        resp = client.post(
+            f"/connections?requester_id=c8-rl-req&recipient_id=c8-rl-rec-{i}"
+        )
+        assert resp.status_code == 201, f"request {i} failed: {resp.text}"
+    # 21st request must be rate-limited
+    _make_profile(client, "c8-rl-overflow", age=26)
+    resp = client.post("/connections?requester_id=c8-rl-req&recipient_id=c8-rl-overflow")
+    assert resp.status_code == 429
+    assert "rate_limit_exceeded" in resp.json()["detail"]
+
+
+def test_c8_accept_connection_request() -> None:
+    """POST /connections/{id}/accept upgrades the connection to ACCEPTED (C8)."""
+    _make_profile(client, "c8-acc-req", age=25)
+    _make_profile(client, "c8-acc-rec", age=26)
+    send_resp = client.post("/connections?requester_id=c8-acc-req&recipient_id=c8-acc-rec")
+    assert send_resp.status_code == 201
+    conn_id = send_resp.json()["id"]
+    accept_resp = client.post(f"/connections/{conn_id}/accept?acceptor_id=c8-acc-rec")
+    assert accept_resp.status_code == 200
+    assert accept_resp.json()["status"] == "accepted"
+
+
+def test_c8_accept_by_wrong_person_fails() -> None:
+    """Only the recipient can accept a connection request (C8)."""
+    _make_profile(client, "c8-wr-req", age=25)
+    _make_profile(client, "c8-wr-rec", age=26)
+    _make_profile(client, "c8-wr-other", age=27)
+    send_resp = client.post("/connections?requester_id=c8-wr-req&recipient_id=c8-wr-rec")
+    conn_id = send_resp.json()["id"]
+    resp = client.post(f"/connections/{conn_id}/accept?acceptor_id=c8-wr-other")
+    assert resp.status_code == 422
+
+
+def test_c8_rate_limit_response_carries_machine_readable_reason() -> None:
+    """The 429 rate-limit response carries the machine-readable reason 'rate_limit_exceeded' (C8, AC#20)."""
+    _make_profile(client, "c8-mr-req", age=25)
+    for i in range(20):
+        _make_profile(client, f"c8-mr-rec-{i}", age=26)
+        client.post(f"/connections?requester_id=c8-mr-req&recipient_id=c8-mr-rec-{i}")
+    _make_profile(client, "c8-mr-overflow", age=26)
+    resp = client.post("/connections?requester_id=c8-mr-req&recipient_id=c8-mr-overflow")
+    assert resp.status_code == 429
+    detail = resp.json()["detail"]
+    assert detail == "rate_limit_exceeded"
