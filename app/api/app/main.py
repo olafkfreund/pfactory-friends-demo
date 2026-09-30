@@ -289,8 +289,13 @@ def toggle_availability(profile_id: str, open_to_friends: bool) -> ProfileOut:
 
 
 @app.get("/discovery/{searcher_id}", response_model=list[DiscoveryResultOut])
-def discovery(searcher_id: str, radius_km: int = 25) -> list[DiscoveryResultOut]:
-    """Return profiles the searcher may discover (AC#2, AC#3, AC#4, AC#5, AC#7).
+def discovery(
+    searcher_id: str,
+    radius_km: int = 25,
+    lat: float | None = None,
+    lon: float | None = None,
+) -> list[DiscoveryResultOut]:
+    """Return profiles the searcher may discover (AC#2, AC#3, AC#4, AC#5, AC#7, AC#17).
 
     Filters applied: age assurance passed (AC#5), open_to_friends=True,
     age-bracket isolation, may_contact (bidirectional block check — the #86
@@ -299,6 +304,12 @@ def discovery(searcher_id: str, radius_km: int = 25) -> list[DiscoveryResultOut]
     Returns 403 with a machine-readable reason when the searcher's own age
     assurance has not passed, naming whether the status is 'unrecorded' or
     'failed' so the client can present the right message (AC#5).
+
+    AC#17 — coarse location privacy:
+    ``lat`` and ``lon`` are optional query parameters that supply a coarse
+    location for this query only.  They are used transiently for the radius
+    filter and are never written to any durable table and never returned by
+    any read endpoint.  The searcher's stored profile is not modified.
     """
     if radius_km not in VALID_SEARCH_RADII:
         raise HTTPException(
@@ -319,7 +330,13 @@ def discovery(searcher_id: str, radius_km: int = 25) -> list[DiscoveryResultOut]
             status_code=status.HTTP_403_FORBIDDEN,
             detail="age_assurance_failed",
         )
-    results = discover(_profiles, searcher, radius_km=radius_km)
+    # AC#17: build a transient GeoLocation from the query params when both are
+    # present.  This object is NEVER written to the store — it exists only for
+    # the duration of this request.
+    query_location: GeoLocation | None = (
+        GeoLocation(lat=lat, lon=lon) if lat is not None and lon is not None else None
+    )
+    results = discover(_profiles, searcher, radius_km=radius_km, query_location=query_location)
     return [
         DiscoveryResultOut(
             profile=_profile_out(r.profile),

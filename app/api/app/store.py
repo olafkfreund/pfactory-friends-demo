@@ -24,6 +24,7 @@ from .domain import (
     Connection,
     ConnectionStatus,
     DiscoveryResult,
+    GeoLocation,
     Message,
     Profile,
     Report,
@@ -185,6 +186,7 @@ def discover(
     store: ProfileStore,
     searcher: Profile,
     radius_km: int = 25,
+    query_location: GeoLocation | None = None,
 ) -> list[DiscoveryResult]:
     """Return profiles the searcher may discover, ordered by match score.
 
@@ -197,7 +199,15 @@ def discover(
     - Radius filter: only profiles within radius_km km when both parties have
       a known location (AC#3).
     - Results are sorted by match score descending (AC#4).
+
+    AC#17 (coarse location): ``query_location``, when supplied, is used for
+    the radius filter in this call only.  It is never written to any store and
+    never returned by any read endpoint — the caller must not persist it.
     """
+    # AC#17: use the transient query location when provided; fall back to the
+    # searcher's stored location.  The query location is NOT saved to the store.
+    effective_location = query_location if query_location is not None else searcher.location
+
     results: list[DiscoveryResult] = []
     searcher_bracket = age_bracket(searcher.age)
     searcher_interests = set(searcher.interests)
@@ -220,10 +230,12 @@ def discover(
         if not may_contact(store, searcher.id, profile.id):
             continue
         # Radius filter (only applied when both locations are known).
+        # Uses the transient query_location if provided (AC#17), otherwise
+        # falls back to the searcher's stored location.
         if (
-            searcher.location is not None
+            effective_location is not None
             and profile.location is not None
-            and searcher.location.distance_to(profile.location) > radius_km
+            and effective_location.distance_to(profile.location) > radius_km
         ):
             continue
 

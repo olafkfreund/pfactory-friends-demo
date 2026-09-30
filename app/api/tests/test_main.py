@@ -777,3 +777,118 @@ def test_c16_retention_policy_source_of_truth_matches_constants() -> None:
     assert body["blocks_months"] == RETENTION_POLICY.blocks_months
     assert body["reports_months"] == RETENTION_POLICY.reports_months
     assert body["other_days"] == RETENTION_POLICY.other_days
+
+
+# ---------------------------------------------------------------------------
+# C17 — Coarse location: never stored, never returned
+# ---------------------------------------------------------------------------
+
+
+def _setup_discoverable_pair_at_location(
+    searcher_id: str,
+    candidate_id: str,
+    candidate_lat: float,
+    candidate_lon: float,
+) -> None:
+    """Create two open/assurance-passed adult profiles; candidate has a stored location."""
+    _make_profile(
+        client,
+        searcher_id,
+        age=25,
+        open_to_friends=True,
+        interests=["music"],
+        lat=0.0,
+        lon=0.0,
+    )
+    _make_profile(
+        client,
+        candidate_id,
+        age=26,
+        open_to_friends=True,
+        interests=["music"],
+        lat=candidate_lat,
+        lon=candidate_lon,
+    )
+    _pass_age_assurance(client, searcher_id)
+    _pass_age_assurance(client, candidate_id)
+
+
+def test_c17_discovery_response_never_includes_lat_lon() -> None:
+    """Discovery results do not contain lat or lon anywhere in the response (C17)."""
+    _setup_discoverable_pair_at_location("c17-searcher-1", "c17-cand-1", 0.0, 0.0)
+    # Pass lat/lon as a coarse query location
+    resp = client.get("/discovery/c17-searcher-1?radius_km=25&lat=0.0&lon=0.0")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert isinstance(body, list)
+    # No result entry and no nested profile should carry lat or lon
+    for result in body:
+        assert "lat" not in result
+        assert "lon" not in result
+        assert "lat" not in result["profile"]
+        assert "lon" not in result["profile"]
+
+
+def test_c17_profile_read_never_includes_lat_lon_after_discovery() -> None:
+    """GET /profiles/{id} does not return lat or lon even after a location-bearing discovery call (C17)."""
+    _make_profile(client, "c17-profile-check", age=25, open_to_friends=True, lat=51.5, lon=-0.1)
+    _pass_age_assurance(client, "c17-profile-check")
+    # Trigger a discovery query with transient lat/lon
+    client.get("/discovery/c17-profile-check?radius_km=25&lat=51.5&lon=-0.1")
+    # Now read the profile back — must not include lat/lon
+    profile_resp = client.get("/profiles/c17-profile-check")
+    assert profile_resp.status_code == 200
+    profile_body = profile_resp.json()
+    assert "lat" not in profile_body
+    assert "lon" not in profile_body
+    assert "location" not in profile_body
+
+
+def test_c17_discovery_with_query_location_filters_by_radius() -> None:
+    """A transient query lat/lon is actually used for radius filtering (C17)."""
+    # Place candidate far away (>25 km from query location 0,0)
+    # 1 degree of latitude ≈ 111 km, so lat=1.0 puts candidate ~111 km away
+    _setup_discoverable_pair_at_location("c17-radius-s", "c17-radius-far", 1.0, 0.0)
+    # Query with lat=0, lon=0 — candidate is ~111 km away, outside 25 km radius
+    resp = client.get("/discovery/c17-radius-s?radius_km=25&lat=0.0&lon=0.0")
+    assert resp.status_code == 200
+    ids = [r["profile"]["id"] for r in resp.json()]
+    assert "c17-radius-far" not in ids
+
+
+def test_c17_discovery_with_query_location_nearby_included() -> None:
+    """A candidate within the transient query radius appears in results (C17)."""
+    # Place candidate at (0.0001, 0.0001) — effectively co-located with the query point
+    _setup_discoverable_pair_at_location("c17-near-s", "c17-near-c", 0.0001, 0.0001)
+    resp = client.get("/discovery/c17-near-s?radius_km=25&lat=0.0&lon=0.0")
+    assert resp.status_code == 200
+    ids = [r["profile"]["id"] for r in resp.json()]
+    assert "c17-near-c" in ids
+
+
+def test_c17_discovery_without_query_location_still_works() -> None:
+    """Discovery still works without lat/lon params — no regression (C17)."""
+    _make_profile(client, "c17-noloc-s", age=25, open_to_friends=True, interests=["chess"])
+    _make_profile(client, "c17-noloc-c", age=26, open_to_friends=True, interests=["chess"])
+    _pass_age_assurance(client, "c17-noloc-s")
+    _pass_age_assurance(client, "c17-noloc-c")
+    resp = client.get("/discovery/c17-noloc-s?radius_km=25")
+    assert resp.status_code == 200
+    ids = [r["profile"]["id"] for r in resp.json()]
+    assert "c17-noloc-c" in ids
+
+
+def test_c17_stored_profile_location_not_overwritten_by_query() -> None:
+    """A discovery call with lat/lon params does NOT alter the searcher's stored profile (C17)."""
+    # Create searcher with no stored location
+    _make_profile(client, "c17-no-overwrite", age=25, open_to_friends=True)
+    _pass_age_assurance(client, "c17-no-overwrite")
+    # Run discovery with a transient lat/lon
+    client.get("/discovery/c17-no-overwrite?radius_km=25&lat=51.5&lon=-0.1")
+    # The profile read must show no location fields
+    profile_resp = client.get("/profiles/c17-no-overwrite")
+    assert profile_resp.status_code == 200
+    profile_body = profile_resp.json()
+    assert "lat" not in profile_body
+    assert "lon" not in profile_body
+    assert "location" not in profile_body
