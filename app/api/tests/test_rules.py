@@ -20,7 +20,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from app.domain import GeoLocation, Profile, ReportReason, ReportTargetKind
+from app.domain import AgeBracket, GeoLocation, Profile, ReportReason, ReportTargetKind, age_bracket
 from app.main import app
 from app.store import (
     MIN_AGE,
@@ -451,6 +451,81 @@ class TestProfileAgeValidation:
             json={"id": "adult-c3", "display_name": "Adult User", "age": 25},
         )
         assert resp.status_code == 201
+
+
+# ---------------------------------------------------------------------------
+# Age bracket isolation (C4)
+# ---------------------------------------------------------------------------
+
+
+class TestAgeBracketIsolation:
+    """C4: A person under 18 is never eligible for discovery by a person 18
+    or over, and a person 18 or over is never eligible for discovery by a
+    person under 18, so adults and minors cannot reach each other at all.
+
+    The boundary is age < 18 → MINOR, age >= 18 → ADULT (domain.py).
+    The single enforcement point is the age-bracket check in store.discover().
+    """
+
+    def test_boundary_17_is_minor(self) -> None:
+        """age_bracket(17) returns MINOR — the boundary just below 18 (C4)."""
+        assert age_bracket(17) == AgeBracket.MINOR
+
+    def test_boundary_18_is_adult(self) -> None:
+        """age_bracket(18) returns ADULT — the boundary at 18 (C4)."""
+        assert age_bracket(18) == AgeBracket.ADULT
+
+    def test_adult_cannot_discover_minor_at_boundary(self) -> None:
+        """An 18-year-old (ADULT) never discovers a 17-year-old (MINOR) (C4)."""
+        store = ProfileStore()
+        adult = _make_profile(id="adult-c4-a", open_to_friends=True, age=18)
+        minor = _make_profile(id="minor-c4-a", open_to_friends=True, age=17)
+        store.save(adult)
+        store.save(minor)
+        results = discover(store, adult)
+        assert not any(r.profile.id == "minor-c4-a" for r in results)
+
+    def test_minor_cannot_discover_adult_at_boundary(self) -> None:
+        """A 17-year-old (MINOR) never discovers an 18-year-old (ADULT) (C4)."""
+        store = ProfileStore()
+        adult = _make_profile(id="adult-c4-b", open_to_friends=True, age=18)
+        minor = _make_profile(id="minor-c4-b", open_to_friends=True, age=17)
+        store.save(adult)
+        store.save(minor)
+        results = discover(store, minor)
+        assert not any(r.profile.id == "adult-c4-b" for r in results)
+
+    def test_adults_can_discover_each_other(self) -> None:
+        """Two adults (both 18+) can discover each other — isolation is between groups, not total (C4)."""
+        store = ProfileStore()
+        a1 = _make_profile(id="adult-c4-c1", open_to_friends=True, age=18)
+        a2 = _make_profile(id="adult-c4-c2", open_to_friends=True, age=25)
+        store.save(a1)
+        store.save(a2)
+        results = discover(store, a1)
+        assert any(r.profile.id == "adult-c4-c2" for r in results)
+
+    def test_minors_can_discover_each_other(self) -> None:
+        """Two minors (both under 18) can discover each other — isolation is between groups (C4)."""
+        store = ProfileStore()
+        m1 = _make_profile(id="minor-c4-d1", open_to_friends=True, age=16)
+        m2 = _make_profile(id="minor-c4-d2", open_to_friends=True, age=17)
+        store.save(m1)
+        store.save(m2)
+        results = discover(store, m1)
+        assert any(r.profile.id == "minor-c4-d2" for r in results)
+
+    def test_isolation_is_symmetric_adult_to_minor(self) -> None:
+        """Isolation works both ways: adult cannot see minor even when minor is open (C4)."""
+        store = ProfileStore()
+        adult = _make_profile(id="adult-c4-sym", open_to_friends=True, age=30)
+        minor = _make_profile(id="minor-c4-sym", open_to_friends=True, age=16)
+        store.save(adult)
+        store.save(minor)
+        adult_sees = [r.profile.id for r in discover(store, adult)]
+        minor_sees = [r.profile.id for r in discover(store, minor)]
+        assert "minor-c4-sym" not in adult_sees
+        assert "adult-c4-sym" not in minor_sees
 
 
 # ---------------------------------------------------------------------------
