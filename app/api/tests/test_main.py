@@ -464,3 +464,111 @@ def test_c10_blocker_absent_from_blocked_persons_discovery() -> None:
     # c (the blocker) must also be absent from d's results
     resp_after = client.get("/discovery/c10-disc-d?radius_km=25")
     assert not any(r["profile"]["id"] == "c10-disc-c" for r in resp_after.json())
+
+
+# ---------------------------------------------------------------------------
+# C11 — Abuse reports: fixed reason list, unrecognised reason refused
+# ---------------------------------------------------------------------------
+
+
+def test_c11_submit_user_report_with_valid_reason() -> None:
+    """POST /reports succeeds with a valid reason targeting a user (C11)."""
+    resp = client.post(
+        "/reports",
+        json={
+            "reporter_id": "c11-reporter",
+            "target_id": "c11-target-user",
+            "target_kind": "user",
+            "reason": "harassment",
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["reason"] == "harassment"
+    assert body["target_kind"] == "user"
+    assert body["reporter_id"] == "c11-reporter"
+
+
+def test_c11_submit_message_report_with_valid_reason() -> None:
+    """POST /reports succeeds with a valid reason targeting a message (C11)."""
+    resp = client.post(
+        "/reports",
+        json={
+            "reporter_id": "c11-reporter-msg",
+            "target_id": "msg-42",
+            "target_kind": "message",
+            "reason": "inappropriate_content",
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["reason"] == "inappropriate_content"
+    assert body["target_kind"] == "message"
+
+
+def test_c11_all_valid_reasons_accepted() -> None:
+    """Every reason in the fixed list is accepted by the API (C11)."""
+    valid_reasons = [
+        "spam",
+        "harassment",
+        "inappropriate_content",
+        "fake_profile",
+        "underage_user",
+        "other",
+    ]
+    for reason in valid_reasons:
+        resp = client.post(
+            "/reports",
+            json={
+                "reporter_id": "c11-all-reasons",
+                "target_id": "c11-target",
+                "target_kind": "user",
+                "reason": reason,
+            },
+        )
+        assert resp.status_code == 201, f"reason '{reason}' was rejected unexpectedly"
+        assert resp.json()["reason"] == reason
+
+
+def test_c11_unrecognised_reason_refused_with_422() -> None:
+    """POST /reports with an unrecognised reason returns 422 — never stored as free text (C11)."""
+    resp = client.post(
+        "/reports",
+        json={
+            "reporter_id": "c11-bad-reason",
+            "target_id": "c11-target",
+            "target_kind": "user",
+            "reason": "custom_free_text_reason",
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_c11_unrecognised_target_kind_refused_with_422() -> None:
+    """POST /reports with an unrecognised target_kind returns 422 (C11)."""
+    resp = client.post(
+        "/reports",
+        json={
+            "reporter_id": "c11-bad-kind",
+            "target_id": "c11-target",
+            "target_kind": "post",  # not a valid target kind
+            "reason": "spam",
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_c11_report_with_optional_additional_text() -> None:
+    """POST /reports with additional text stores the trimmed text (C11)."""
+    resp = client.post(
+        "/reports",
+        json={
+            "reporter_id": "c11-text-reporter",
+            "target_id": "c11-text-target",
+            "target_kind": "user",
+            "reason": "other",
+            "additional_text": "  extra context  ",
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["additional_text"] == "extra context"  # trimmed

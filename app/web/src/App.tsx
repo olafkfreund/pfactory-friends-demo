@@ -268,6 +268,7 @@ function Conversation({ myId, connection, onBlock }: ConversationProps) {
   const [newMessage, setNewMessage] = useState('')
   const [sendStatus, setSendStatus] = useState<'idle' | 'sending' | 'error'>('idle')
   const [showReport, setShowReport] = useState(false)
+  const [reportMessageId, setReportMessageId] = useState<string | null>(null)
 
   useEffect(() => {
     getMessages(myId, otherId)
@@ -310,9 +311,25 @@ function Conversation({ myId, connection, onBlock }: ConversationProps) {
         {messages.map((m) => (
           <li key={m.id}>
             <strong>{m.sender_id === myId ? 'You' : otherId}:</strong> {m.body}
+            {m.sender_id !== myId && (
+              <button
+                onClick={() => setReportMessageId(m.id)}
+                aria-label={`Report message ${m.id}`}
+              >
+                Report message
+              </button>
+            )}
           </li>
         ))}
       </ul>
+      {reportMessageId !== null && (
+        <ReportModal
+          myId={myId}
+          targetId={reportMessageId}
+          targetKind="message"
+          onClose={() => setReportMessageId(null)}
+        />
+      )}
       <div>
         <input
           type="text"
