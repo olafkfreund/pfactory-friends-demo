@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 87
 spec: spec/2026-09-30-87-myfriends-web.md
 ---
