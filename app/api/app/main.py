@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from .domain import (
     VALID_SEARCH_RADII,
+    AgeAssuranceStatus,
     GeoLocation,
     Profile,
     ReportReason,
@@ -72,6 +73,7 @@ class ProfileOut(BaseModel):
     activities: list[str]
     age: int
     open_to_friends: bool
+    age_assurance_status: str  # AC#5: surface the status so callers can act on it
 
 
 class ConnectionOut(BaseModel):
@@ -137,6 +139,7 @@ def _profile_out(p: Profile) -> ProfileOut:
         activities=p.activities,
         age=p.age,
         open_to_friends=p.open_to_friends,
+        age_assurance_status=p.age_assurance_status.value,
     )
 
 
@@ -228,10 +231,15 @@ def toggle_availability(profile_id: str, open_to_friends: bool) -> ProfileOut:
 
 @app.get("/discovery/{searcher_id}", response_model=list[DiscoveryResultOut])
 def discovery(searcher_id: str, radius_km: int = 25) -> list[DiscoveryResultOut]:
-    """Return profiles the searcher may discover (AC#2, AC#3, AC#4, AC#7).
+    """Return profiles the searcher may discover (AC#2, AC#3, AC#4, AC#5, AC#7).
 
-    Filters applied: open_to_friends=True, age-bracket isolation, may_contact
-    (bidirectional block check — the #86 fix), radius.
+    Filters applied: age assurance passed (AC#5), open_to_friends=True,
+    age-bracket isolation, may_contact (bidirectional block check — the #86
+    fix), radius.
+
+    Returns 403 with a machine-readable reason when the searcher's own age
+    assurance has not passed, naming whether the status is 'unrecorded' or
+    'failed' so the client can present the right message (AC#5).
     """
     if radius_km not in VALID_SEARCH_RADII:
         raise HTTPException(
@@ -241,6 +249,17 @@ def discovery(searcher_id: str, radius_km: int = 25) -> list[DiscoveryResultOut]
     searcher = _profiles.find(searcher_id)
     if searcher is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="searcher not found")
+    # AC#5: searcher must have passed age assurance to use discovery.
+    if searcher.age_assurance_status == AgeAssuranceStatus.UNRECORDED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="age_assurance_unrecorded",
+        )
+    if searcher.age_assurance_status == AgeAssuranceStatus.FAILED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="age_assurance_failed",
+        )
     results = discover(_profiles, searcher, radius_km=radius_km)
     return [
         DiscoveryResultOut(
@@ -251,6 +270,36 @@ def discovery(searcher_id: str, radius_km: int = 25) -> list[DiscoveryResultOut]
         )
         for r in results
     ]
+
+
+# ---------------------------------------------------------------------------
+# Age assurance
+# ---------------------------------------------------------------------------
+
+
+class AgeAssuranceIn(BaseModel):
+    status: AgeAssuranceStatus
+
+
+@app.post("/profiles/{profile_id}/age-assurance", response_model=ProfileOut)
+def record_age_assurance(profile_id: str, body: AgeAssuranceIn) -> ProfileOut:
+    """Record the age assurance result for a profile (AC#5).
+
+    Accepted statuses: 'passed', 'failed'.  (Setting to 'unrecorded' is not
+    a valid operation — that is the initial state on creation.)
+    """
+    profile = _profiles.find(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="profile not found")
+    if body.status == AgeAssuranceStatus.UNRECORDED:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="cannot set age_assurance_status to 'unrecorded' via this endpoint",
+        )
+    _profiles.set_age_assurance(profile_id, body.status)
+    updated = _profiles.find(profile_id)
+    assert updated is not None
+    return _profile_out(updated)
 
 
 # ---------------------------------------------------------------------------

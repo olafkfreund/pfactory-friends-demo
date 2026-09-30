@@ -20,7 +20,15 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from app.domain import AgeBracket, GeoLocation, Profile, ReportReason, ReportTargetKind, age_bracket
+from app.domain import (
+    AgeAssuranceStatus,
+    AgeBracket,
+    GeoLocation,
+    Profile,
+    ReportReason,
+    ReportTargetKind,
+    age_bracket,
+)
 from app.main import app
 from app.store import (
     MIN_AGE,
@@ -95,6 +103,7 @@ class TestDiscovery:
         candidate = _make_profile(id="c", open_to_friends=True, age=30)
         store.save(searcher)
         store.save(candidate)
+        store.set_age_assurance("c", AgeAssuranceStatus.PASSED)
         results = discover(store, searcher)
         assert any(r.profile.id == "c" for r in results)
 
@@ -161,6 +170,7 @@ class TestDiscovery:
         m2 = _make_profile(id="m2", open_to_friends=True, age=17)
         store.save(m1)
         store.save(m2)
+        store.set_age_assurance("m2", AgeAssuranceStatus.PASSED)
         results = discover(store, m1)
         assert any(r.profile.id == "m2" for r in results)
 
@@ -183,6 +193,10 @@ class TestDiscovery:
         store.save(searcher)
         store.save(nearby)
         store.save(far)
+        # Both candidates need PASSED age assurance to be eligible; the radius
+        # filter is what removes "far" from results.
+        store.set_age_assurance("nearby", AgeAssuranceStatus.PASSED)
+        store.set_age_assurance("far", AgeAssuranceStatus.PASSED)
         results = discover(store, searcher, radius_km=5)
         ids = {r.profile.id for r in results}
         assert "nearby" in ids
@@ -199,6 +213,8 @@ class TestDiscovery:
         store.save(searcher)
         store.save(good_match)
         store.save(poor_match)
+        store.set_age_assurance("good", AgeAssuranceStatus.PASSED)
+        store.set_age_assurance("poor", AgeAssuranceStatus.PASSED)
         results = discover(store, searcher)
         ids = [r.profile.id for r in results]
         assert ids.index("good") < ids.index("poor")
@@ -502,6 +518,7 @@ class TestAgeBracketIsolation:
         a2 = _make_profile(id="adult-c4-c2", open_to_friends=True, age=25)
         store.save(a1)
         store.save(a2)
+        store.set_age_assurance("adult-c4-c2", AgeAssuranceStatus.PASSED)
         results = discover(store, a1)
         assert any(r.profile.id == "adult-c4-c2" for r in results)
 
@@ -512,16 +529,23 @@ class TestAgeBracketIsolation:
         m2 = _make_profile(id="minor-c4-d2", open_to_friends=True, age=17)
         store.save(m1)
         store.save(m2)
+        store.set_age_assurance("minor-c4-d2", AgeAssuranceStatus.PASSED)
         results = discover(store, m1)
         assert any(r.profile.id == "minor-c4-d2" for r in results)
 
     def test_isolation_is_symmetric_adult_to_minor(self) -> None:
-        """Isolation works both ways: adult cannot see minor even when minor is open (C4)."""
+        """Isolation works both ways: adult cannot see minor even when minor is open (C4).
+
+        Both profiles are given PASSED age assurance so that only the age-bracket
+        rule causes the exclusion — the test directly verifies that rule.
+        """
         store = ProfileStore()
         adult = _make_profile(id="adult-c4-sym", open_to_friends=True, age=30)
         minor = _make_profile(id="minor-c4-sym", open_to_friends=True, age=16)
         store.save(adult)
         store.save(minor)
+        store.set_age_assurance("adult-c4-sym", AgeAssuranceStatus.PASSED)
+        store.set_age_assurance("minor-c4-sym", AgeAssuranceStatus.PASSED)
         adult_sees = [r.profile.id for r in discover(store, adult)]
         minor_sees = [r.profile.id for r in discover(store, minor)]
         assert "minor-c4-sym" not in adult_sees
@@ -596,6 +620,10 @@ class TestAPI:
             json={"id": "adult-disc", "display_name": "Adult", "age": 30, "open_to_friends": True},
         )
         client.post(
+            "/profiles/adult-disc/age-assurance",
+            json={"status": "passed"},
+        )
+        client.post(
             "/profiles",
             json={"id": "minor-disc", "display_name": "Minor", "age": 17, "open_to_friends": True},
         )
@@ -603,3 +631,177 @@ class TestAPI:
         assert resp.status_code == 200
         ids = [r["profile"]["id"] for r in resp.json()]
         assert "minor-disc" not in ids
+
+
+# ---------------------------------------------------------------------------
+# Age assurance (C5)
+# ---------------------------------------------------------------------------
+
+
+class TestAgeAssurance:
+    """C5: An account is eligible for discovery only once age assurance is
+    recorded as passed; an account with age assurance unrecorded or failed is
+    ineligible, and the API says which.
+
+    The default AgeAssuranceStatus is UNRECORDED. The store's discover()
+    filters out any candidate whose status is not PASSED. The discovery
+    endpoint refuses a searcher whose own status is not PASSED, naming
+    whether it is 'unrecorded' or 'failed' in the response detail.
+    """
+
+    # --- Domain / store tests ---
+
+    def test_new_profile_has_unrecorded_status(self) -> None:
+        """A freshly saved profile defaults to UNRECORDED age assurance (C5)."""
+        store = ProfileStore()
+        p = _make_profile(id="aa-new", open_to_friends=True, age=25)
+        store.save(p)
+        assert store.find("aa-new").age_assurance_status == AgeAssuranceStatus.UNRECORDED  # type: ignore[union-attr]
+
+    def test_set_age_assurance_passed(self) -> None:
+        """set_age_assurance() records PASSED for an existing profile (C5)."""
+        store = ProfileStore()
+        p = _make_profile(id="aa-pass", open_to_friends=True, age=25)
+        store.save(p)
+        store.set_age_assurance("aa-pass", AgeAssuranceStatus.PASSED)
+        assert store.find("aa-pass").age_assurance_status == AgeAssuranceStatus.PASSED  # type: ignore[union-attr]
+
+    def test_set_age_assurance_failed(self) -> None:
+        """set_age_assurance() records FAILED for an existing profile (C5)."""
+        store = ProfileStore()
+        p = _make_profile(id="aa-fail", open_to_friends=True, age=25)
+        store.save(p)
+        store.set_age_assurance("aa-fail", AgeAssuranceStatus.FAILED)
+        assert store.find("aa-fail").age_assurance_status == AgeAssuranceStatus.FAILED  # type: ignore[union-attr]
+
+    def test_unrecorded_candidate_excluded_from_discovery(self) -> None:
+        """A candidate with UNRECORDED age assurance is excluded from discovery results (C5)."""
+        store = ProfileStore()
+        searcher = _make_profile(id="aa-s1", open_to_friends=True, age=25)
+        store.save(searcher)
+        store.set_age_assurance("aa-s1", AgeAssuranceStatus.PASSED)
+        candidate = _make_profile(id="aa-c1", open_to_friends=True, age=30)
+        store.save(candidate)
+        # candidate retains UNRECORDED (default)
+        results = discover(store, searcher)
+        assert not any(r.profile.id == "aa-c1" for r in results)
+
+    def test_failed_candidate_excluded_from_discovery(self) -> None:
+        """A candidate with FAILED age assurance is excluded from discovery results (C5)."""
+        store = ProfileStore()
+        searcher = _make_profile(id="aa-s2", open_to_friends=True, age=25)
+        store.save(searcher)
+        store.set_age_assurance("aa-s2", AgeAssuranceStatus.PASSED)
+        candidate = _make_profile(id="aa-c2", open_to_friends=True, age=30)
+        store.save(candidate)
+        store.set_age_assurance("aa-c2", AgeAssuranceStatus.FAILED)
+        results = discover(store, searcher)
+        assert not any(r.profile.id == "aa-c2" for r in results)
+
+    def test_passed_candidate_appears_in_discovery(self) -> None:
+        """A candidate with PASSED age assurance appears in discovery results (C5)."""
+        store = ProfileStore()
+        searcher = _make_profile(id="aa-s3", open_to_friends=True, age=25)
+        store.save(searcher)
+        store.set_age_assurance("aa-s3", AgeAssuranceStatus.PASSED)
+        candidate = _make_profile(id="aa-c3", open_to_friends=True, age=30)
+        store.save(candidate)
+        store.set_age_assurance("aa-c3", AgeAssuranceStatus.PASSED)
+        results = discover(store, searcher)
+        assert any(r.profile.id == "aa-c3" for r in results)
+
+    # --- API-level tests ---
+
+    def test_api_discovery_refuses_unrecorded_searcher_with_reason(self) -> None:
+        """GET /discovery/{id} returns 403 and names 'unrecorded' when searcher has no age assurance (C5)."""
+        client.post(
+            "/profiles",
+            json={"id": "aa-api-s1", "display_name": "S1", "age": 25, "open_to_friends": True},
+        )
+        # No age-assurance call — status remains UNRECORDED
+        resp = client.get("/discovery/aa-api-s1?radius_km=25")
+        assert resp.status_code == 403
+        assert "unrecorded" in resp.json()["detail"]
+
+    def test_api_discovery_refuses_failed_searcher_with_reason(self) -> None:
+        """GET /discovery/{id} returns 403 and names 'failed' when searcher's age assurance failed (C5)."""
+        client.post(
+            "/profiles",
+            json={"id": "aa-api-s2", "display_name": "S2", "age": 25, "open_to_friends": True},
+        )
+        client.post("/profiles/aa-api-s2/age-assurance", json={"status": "failed"})
+        resp = client.get("/discovery/aa-api-s2?radius_km=25")
+        assert resp.status_code == 403
+        assert "failed" in resp.json()["detail"]
+
+    def test_api_discovery_succeeds_when_searcher_passed(self) -> None:
+        """GET /discovery/{id} succeeds (200) when searcher's age assurance is PASSED (C5)."""
+        client.post(
+            "/profiles",
+            json={"id": "aa-api-s3", "display_name": "S3", "age": 25, "open_to_friends": True},
+        )
+        client.post("/profiles/aa-api-s3/age-assurance", json={"status": "passed"})
+        resp = client.get("/discovery/aa-api-s3?radius_km=25")
+        assert resp.status_code == 200
+
+    def test_api_discovery_excludes_candidate_without_age_assurance(self) -> None:
+        """Discovery results omit candidates whose age assurance has not passed (C5)."""
+        client.post(
+            "/profiles",
+            json={"id": "aa-api-s4", "display_name": "S4", "age": 25, "open_to_friends": True},
+        )
+        client.post("/profiles/aa-api-s4/age-assurance", json={"status": "passed"})
+        client.post(
+            "/profiles",
+            json={"id": "aa-api-c4", "display_name": "C4", "age": 26, "open_to_friends": True},
+        )
+        # candidate has UNRECORDED status — must not appear
+        resp = client.get("/discovery/aa-api-s4?radius_km=25")
+        assert resp.status_code == 200
+        ids = [r["profile"]["id"] for r in resp.json()]
+        assert "aa-api-c4" not in ids
+
+    def test_api_discovery_includes_candidate_with_passed_assurance(self) -> None:
+        """Discovery results include candidates whose age assurance is PASSED (C5)."""
+        client.post(
+            "/profiles",
+            json={"id": "aa-api-s5", "display_name": "S5", "age": 25, "open_to_friends": True},
+        )
+        client.post("/profiles/aa-api-s5/age-assurance", json={"status": "passed"})
+        client.post(
+            "/profiles",
+            json={"id": "aa-api-c5", "display_name": "C5", "age": 26, "open_to_friends": True},
+        )
+        client.post("/profiles/aa-api-c5/age-assurance", json={"status": "passed"})
+        resp = client.get("/discovery/aa-api-s5?radius_km=25")
+        assert resp.status_code == 200
+        ids = [r["profile"]["id"] for r in resp.json()]
+        assert "aa-api-c5" in ids
+
+    def test_api_record_age_assurance_returns_updated_profile(self) -> None:
+        """POST /profiles/{id}/age-assurance returns the profile with the new status (C5)."""
+        client.post(
+            "/profiles",
+            json={"id": "aa-api-rec", "display_name": "Rec", "age": 25},
+        )
+        resp = client.post("/profiles/aa-api-rec/age-assurance", json={"status": "passed"})
+        assert resp.status_code == 200
+        assert resp.json()["age_assurance_status"] == "passed"
+
+    def test_api_record_age_assurance_unknown_profile_404(self) -> None:
+        """POST /profiles/{id}/age-assurance returns 404 for a missing profile (C5)."""
+        resp = client.post(
+            "/profiles/no-such-profile/age-assurance", json={"status": "passed"}
+        )
+        assert resp.status_code == 404
+
+    def test_api_record_age_assurance_refuses_unrecorded_status(self) -> None:
+        """POST /profiles/{id}/age-assurance rejects 'unrecorded' as a target status (C5)."""
+        client.post(
+            "/profiles",
+            json={"id": "aa-api-unr", "display_name": "Unr", "age": 25},
+        )
+        resp = client.post(
+            "/profiles/aa-api-unr/age-assurance", json={"status": "unrecorded"}
+        )
+        assert resp.status_code == 422

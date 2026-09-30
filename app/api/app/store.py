@@ -20,6 +20,7 @@ from __future__ import annotations
 import time
 
 from .domain import (
+    AgeAssuranceStatus,
     Connection,
     ConnectionStatus,
     DiscoveryResult,
@@ -74,6 +75,16 @@ class ProfileStore:
     def is_blocked(self, blocker_id: str, blocked_id: str) -> bool:
         """Return True if blocker_id has blocked blocked_id."""
         return blocked_id in self._blocked_by.get(blocker_id, set())
+
+    def set_age_assurance(self, profile_id: str, status: AgeAssuranceStatus) -> None:
+        """Record the age assurance result for an existing profile (AC#5).
+
+        The status is written directly to the stored Profile object; callers
+        should re-fetch the profile to observe the change.
+        """
+        profile = self._profiles.get(profile_id)
+        if profile is not None:
+            profile.age_assurance_status = status
 
     def delete(self, profile_id: str) -> None:
         """Delete the profile and all block records it owns (P1, P2)."""
@@ -161,6 +172,10 @@ def discover(
         if profile.id == searcher.id:
             continue
         if not profile.open_to_friends:
+            continue
+        # Age assurance (AC#5): only profiles with PASSED age assurance are
+        # eligible to appear in discovery results.
+        if profile.age_assurance_status != AgeAssuranceStatus.PASSED:
             continue
         # Age-bracket isolation (compliance — adults and minors never meet in
         # discovery).

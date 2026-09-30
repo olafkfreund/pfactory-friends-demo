@@ -23,6 +23,22 @@ class AgeBracket(str, Enum):
     ADULT = "adult"  # 18+
 
 
+class AgeAssuranceStatus(str, Enum):
+    """Age assurance state for a profile (AC#5).
+
+    An account is eligible for discovery only once age assurance is recorded
+    as passed. Profiles with UNRECORDED or FAILED status are excluded from
+    every discovery result set, and the API names the reason when a searcher
+    with non-PASSED status attempts a discovery query.
+
+    Ported from lanes/kotlin-core/src/main/kotlin/AgeAssurance.kt.
+    """
+
+    UNRECORDED = "unrecorded"  # default: age assurance not yet attempted
+    FAILED = "failed"  # age assurance attempted and did not pass
+    PASSED = "passed"  # age assurance passed — eligible for discovery
+
+
 def age_bracket(age: int) -> AgeBracket:
     """Return the age bracket for the given age in years."""
     return AgeBracket.MINOR if age < 18 else AgeBracket.ADULT
@@ -110,6 +126,7 @@ class Profile:
     age: int = 18  # self-reported; must be >= MIN_AGE at save time
     open_to_friends: bool = False  # AC#2: off by default
     location: GeoLocation | None = None  # AC#12 / P4
+    age_assurance_status: AgeAssuranceStatus = AgeAssuranceStatus.UNRECORDED  # AC#5
 
 
 @dataclass
