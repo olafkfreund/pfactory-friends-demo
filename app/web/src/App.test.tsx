@@ -129,6 +129,82 @@ describe('App', () => {
   })
 
   // -------------------------------------------------------------------------
+  // Create / edit profile form (AC#19: create a profile step)
+  // -------------------------------------------------------------------------
+
+  it('renders an "Edit profile" button on the profile tab', async () => {
+    ;(fetch as FetchMock).mockResolvedValueOnce(ok(ME))
+    render(<App />)
+    await waitFor(() => screen.getByRole('button', { name: /edit profile/i }))
+    expect(screen.getByRole('button', { name: /edit profile/i })).toBeInTheDocument()
+  })
+
+  it('shows the create-profile form when "Edit profile" is clicked', async () => {
+    ;(fetch as FetchMock).mockResolvedValueOnce(ok(ME))
+    render(<App />)
+    await waitFor(() => screen.getByRole('button', { name: /edit profile/i }))
+    fireEvent.click(screen.getByRole('button', { name: /edit profile/i }))
+    expect(screen.getByRole('form', { name: /create profile/i })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: /display name/i })).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: /age/i })).toBeInTheDocument()
+  })
+
+  it('sends POST /profiles when the profile form is saved', async () => {
+    const savedProfile = { id: 'placeholder', display_name: 'Alice', bio: 'Hello!' }
+    ;(fetch as FetchMock)
+      .mockResolvedValueOnce(ok(ME))          // getMe
+      .mockResolvedValueOnce(ok(savedProfile)) // createProfile
+    render(<App />)
+    await waitFor(() => screen.getByRole('button', { name: /edit profile/i }))
+    fireEvent.click(screen.getByRole('button', { name: /edit profile/i }))
+
+    const nameInput = screen.getByRole('textbox', { name: /display name/i })
+    fireEvent.change(nameInput, { target: { value: 'Alice' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /save profile/i }))
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        '/profiles',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('Alice'),
+        }),
+      ),
+    )
+  })
+
+  it('updates the displayed name after a successful profile save', async () => {
+    const savedProfile = { id: 'placeholder', display_name: 'Alice', bio: 'New bio' }
+    ;(fetch as FetchMock)
+      .mockResolvedValueOnce(ok(ME))          // getMe
+      .mockResolvedValueOnce(ok(savedProfile)) // createProfile
+    render(<App />)
+    await waitFor(() => screen.getByRole('button', { name: /edit profile/i }))
+    fireEvent.click(screen.getByRole('button', { name: /edit profile/i }))
+
+    const nameInput = screen.getByRole('textbox', { name: /display name/i })
+    fireEvent.change(nameInput, { target: { value: 'Alice' } })
+    fireEvent.click(screen.getByRole('button', { name: /save profile/i }))
+
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
+    // Form should be hidden after save
+    expect(screen.queryByRole('form', { name: /create profile/i })).not.toBeInTheDocument()
+  })
+
+  it('shows an error when the profile save fails', async () => {
+    ;(fetch as FetchMock)
+      .mockResolvedValueOnce(ok(ME))    // getMe
+      .mockResolvedValueOnce(fail(422)) // createProfile fails
+    render(<App />)
+    await waitFor(() => screen.getByRole('button', { name: /edit profile/i }))
+    fireEvent.click(screen.getByRole('button', { name: /edit profile/i }))
+    fireEvent.click(screen.getByRole('button', { name: /save profile/i }))
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+    expect(screen.getByRole('alert')).toHaveTextContent(/could not save profile/i)
+  })
+
+  // -------------------------------------------------------------------------
   // Discover tab navigation
   // -------------------------------------------------------------------------
 

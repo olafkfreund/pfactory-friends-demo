@@ -44,6 +44,17 @@ export type Message = {
   body: string
 }
 
+/** Input shape for POST /profiles (create or upsert a profile). */
+export type ProfileCreate = {
+  id: string
+  display_name: string
+  bio: string
+  interests: string[]
+  activities: string[]
+  age: number
+  open_to_friends: boolean
+}
+
 /** Fixed set of reasons a person can choose when filing a report (AC#8). */
 export type ReportReason =
   | 'spam'

@@ -5,7 +5,24 @@
 // api service); the empty string keeps local dev simple when run behind a
 // dev-server proxy configured to forward those paths.
 
-import type { Connection, DiscoveryResult, MeProfile, Message, ReportReason } from './types.ts'
+import type { Connection, DiscoveryResult, MeProfile, Message, ProfileCreate, ReportReason } from './types.ts'
+
+/**
+ * Create or update a profile (upsert via POST /profiles).
+ * AC#19: the web client can perform the create-profile step of the whole flow.
+ */
+export async function createProfile(data: ProfileCreate): Promise<MeProfile> {
+  const res = await fetch('/profiles', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: string }
+    throw new Error(body.detail ?? `request failed: ${res.status}`)
+  }
+  return res.json() as Promise<MeProfile>
+}
 
 /** Load the currently authenticated user's basic profile (GET /profiles/me). */
 export async function getMe(): Promise<MeProfile> {

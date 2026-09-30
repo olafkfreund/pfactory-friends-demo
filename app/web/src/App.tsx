@@ -17,6 +17,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   acceptConnection,
   blockUser,
+  createProfile,
   getDiscovery,
   getMe,
   getMessages,
@@ -37,7 +38,112 @@ type SendStatus = 'idle' | 'sending' | 'sent' | 'error'
 type AcceptStatus = 'idle' | 'accepting' | 'error'
 
 // ---------------------------------------------------------------------------
-// Profile tab — display and availability toggle (AC#2)
+// Create / edit profile form (AC#19: create a profile step)
+// ---------------------------------------------------------------------------
+
+type EditProfileFormProps = {
+  profileId: string
+  initialDisplayName?: string
+  initialBio?: string
+  onSaved: (updated: MeProfile) => void
+}
+
+function EditProfileForm({ profileId, initialDisplayName = '', initialBio = '', onSaved }: EditProfileFormProps) {
+  const [displayName, setDisplayName] = useState(initialDisplayName)
+  const [bio, setBio] = useState(initialBio)
+  const [age, setAge] = useState(18)
+  const [interestsRaw, setInterestsRaw] = useState('')
+  const [status, setStatus] = useState<'idle' | 'saving' | 'error'>('idle')
+  const [errorMessage, setErrorMessage] = useState('')
+
+  const handleSave = useCallback(async () => {
+    setStatus('saving')
+    try {
+      const interests = interestsRaw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      const updated = await createProfile({
+        id: profileId,
+        display_name: displayName,
+        bio,
+        interests,
+        activities: [],
+        age,
+        open_to_friends: false,
+      })
+      setStatus('idle')
+      onSaved(updated)
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Unknown error')
+      setStatus('error')
+    }
+  }, [profileId, displayName, bio, age, interestsRaw, onSaved])
+
+  return (
+    <form
+      aria-label="Create profile"
+      onSubmit={(e) => {
+        e.preventDefault()
+        void handleSave()
+      }}
+    >
+      <div>
+        <label htmlFor="edit-display-name">Display name</label>
+        <input
+          id="edit-display-name"
+          type="text"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          aria-label="Display name"
+          required
+        />
+      </div>
+      <div>
+        <label htmlFor="edit-age">Age</label>
+        <input
+          id="edit-age"
+          type="number"
+          min={16}
+          max={120}
+          value={age}
+          onChange={(e) => setAge(Number(e.target.value))}
+          aria-label="Age"
+          required
+        />
+      </div>
+      <div>
+        <label htmlFor="edit-bio">Bio</label>
+        <textarea
+          id="edit-bio"
+          value={bio}
+          onChange={(e) => setBio(e.target.value)}
+          aria-label="Bio"
+        />
+      </div>
+      <div>
+        <label htmlFor="edit-interests">Interests (comma-separated, up to 10)</label>
+        <input
+          id="edit-interests"
+          type="text"
+          value={interestsRaw}
+          onChange={(e) => setInterestsRaw(e.target.value)}
+          aria-label="Interests"
+          placeholder="hiking, reading, cooking"
+        />
+      </div>
+      {status === 'error' && (
+        <p role="alert">Could not save profile: {errorMessage}</p>
+      )}
+      <button type="submit" disabled={status === 'saving'} aria-label="Save profile">
+        {status === 'saving' ? 'Saving...' : 'Save profile'}
+      </button>
+    </form>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Profile tab — display, availability toggle (AC#2), and edit form (AC#19)
 // ---------------------------------------------------------------------------
 
 type ProfileTabProps = {
@@ -45,9 +151,12 @@ type ProfileTabProps = {
   openToFriends: boolean
   availabilityStatus: AvailabilityStatus
   onToggle: (open: boolean) => void
+  onProfileUpdated: (updated: MeProfile) => void
 }
 
-function ProfileTab({ profile, openToFriends, availabilityStatus, onToggle }: ProfileTabProps) {
+function ProfileTab({ profile, openToFriends, availabilityStatus, onToggle, onProfileUpdated }: ProfileTabProps) {
+  const [showEdit, setShowEdit] = useState(false)
+
   return (
     <section aria-label="Profile">
       <h1>{profile.display_name}</h1>
@@ -69,6 +178,23 @@ function ProfileTab({ profile, openToFriends, availabilityStatus, onToggle }: Pr
       )}
       {availabilityStatus === 'error' && (
         <p role="alert">Failed to update availability.</p>
+      )}
+      <button
+        onClick={() => setShowEdit((v) => !v)}
+        aria-label={showEdit ? 'Cancel editing profile' : 'Edit profile'}
+      >
+        {showEdit ? 'Cancel' : 'Edit profile'}
+      </button>
+      {showEdit && (
+        <EditProfileForm
+          profileId={profile.id}
+          initialDisplayName={profile.display_name}
+          initialBio={profile.bio}
+          onSaved={(updated) => {
+            setShowEdit(false)
+            onProfileUpdated(updated)
+          }}
+        />
       )}
     </section>
   )
@@ -544,6 +670,10 @@ function App() {
     setConnections((prev) => prev.filter((c) => c.id !== connectionId))
   }, [])
 
+  const handleProfileUpdated = useCallback((updated: MeProfile) => {
+    setProfile(updated)
+  }, [])
+
   if (loading) return <p role="status">Loading profile...</p>
   if (loadError) return <p role="alert">Could not load profile: {loadError}</p>
   if (!profile) return <p role="alert">No profile found.</p>
@@ -576,6 +706,7 @@ function App() {
           openToFriends={openToFriends}
           availabilityStatus={availabilityStatus}
           onToggle={(open) => void handleAvailabilityToggle(open)}
+          onProfileUpdated={handleProfileUpdated}
         />
       )}
       {tab === 'discovery' && (
