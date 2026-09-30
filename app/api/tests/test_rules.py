@@ -17,11 +17,13 @@ must fail.  That is what this test suite is here to prove.
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.domain import GeoLocation, Profile, ReportReason, ReportTargetKind
 from app.main import app
 from app.store import (
+    MIN_AGE,
     ConnectionStore,
     MessageStore,
     ProfileStore,
@@ -372,6 +374,83 @@ class TestReports:
         report = rs.submit("alice", "bob", ReportTargetKind.USER, ReportReason.OTHER, "  trimmed  ")
         assert report is not None
         assert report.additional_text == "trimmed"
+
+
+# ---------------------------------------------------------------------------
+# Profile age validation (C3)
+# ---------------------------------------------------------------------------
+
+
+class TestProfileAgeValidation:
+    """C3: An account whose stated age is under 16 is refused at creation,
+    and the refusal names age as the reason.
+
+    MIN_AGE is the single source of truth for the minimum allowed age (store.py).
+    The enforcement point is ProfileStore.save(), re-raised as HTTP 422 by the
+    create_profile endpoint in main.py.
+    """
+
+    def test_store_refuses_age_below_minimum(self) -> None:
+        """ProfileStore.save raises ValueError naming 'age' when age < MIN_AGE."""
+        store = ProfileStore()
+        profile = _make_profile(id="underage", age=MIN_AGE - 1)
+        with pytest.raises(ValueError, match="age"):
+            store.save(profile)
+
+    def test_store_refuses_age_zero(self) -> None:
+        """Age 0 is also below the minimum and must be refused."""
+        store = ProfileStore()
+        profile = _make_profile(id="zero-age", age=0)
+        with pytest.raises(ValueError, match="age"):
+            store.save(profile)
+
+    def test_store_accepts_minimum_age(self) -> None:
+        """ProfileStore.save accepts age == MIN_AGE (boundary value)."""
+        store = ProfileStore()
+        profile = _make_profile(id="just-min", age=MIN_AGE)
+        store.save(profile)  # must not raise
+
+    def test_store_accepts_adult_age(self) -> None:
+        """ProfileStore.save accepts age 18 (adult bracket)."""
+        store = ProfileStore()
+        profile = _make_profile(id="adult", age=18)
+        store.save(profile)  # must not raise
+
+    def test_api_refuses_age_below_minimum(self) -> None:
+        """POST /profiles with age=15 returns 422 and the detail names 'age' (C3)."""
+        resp = client.post(
+            "/profiles",
+            json={"id": "underage-c3", "display_name": "Too Young", "age": MIN_AGE - 1},
+        )
+        assert resp.status_code == 422
+        detail = str(resp.json().get("detail", ""))
+        assert "age" in detail.lower()
+
+    def test_api_refuses_age_zero(self) -> None:
+        """POST /profiles with age=0 returns 422 and the detail names 'age' (C3)."""
+        resp = client.post(
+            "/profiles",
+            json={"id": "zero-age-c3", "display_name": "Zero Age", "age": 0},
+        )
+        assert resp.status_code == 422
+        detail = str(resp.json().get("detail", ""))
+        assert "age" in detail.lower()
+
+    def test_api_accepts_minimum_age(self) -> None:
+        """POST /profiles with age=MIN_AGE is accepted (boundary value — C3)."""
+        resp = client.post(
+            "/profiles",
+            json={"id": "min-age-c3", "display_name": "Just Sixteen", "age": MIN_AGE},
+        )
+        assert resp.status_code == 201
+
+    def test_api_accepts_adult_age(self) -> None:
+        """POST /profiles with age=25 is accepted (normal adult case — C3)."""
+        resp = client.post(
+            "/profiles",
+            json={"id": "adult-c3", "display_name": "Adult User", "age": 25},
+        )
+        assert resp.status_code == 201
 
 
 # ---------------------------------------------------------------------------
