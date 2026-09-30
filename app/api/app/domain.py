@@ -10,7 +10,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class AgeBracket(str, Enum):
@@ -220,5 +219,5 @@ class Report:
     queue_status: ReviewQueueStatus = field(
         default=ReviewQueueStatus.ACCEPTED
     )  # AC#12: enters queue in accepted state
-    resolution_outcome: Optional[ReportResolutionOutcome] = None  # AC#13: set on resolution
-    resolved_at: Optional[float] = None  # AC#13: epoch-seconds timestamp recorded at resolution
+    resolution_outcome: ReportResolutionOutcome | None = None  # AC#13: set on resolution
+    resolved_at: float | None = None  # AC#13: epoch-seconds timestamp recorded at resolution

@@ -135,6 +135,13 @@ class ResolveReportIn(BaseModel):
     outcome: ReportResolutionOutcome
 
 
+class ContactStatusOut(BaseModel):
+    """Contact removal status for a profile (AC#14)."""
+
+    contact_removed: bool
+    reason: str | None = None  # machine-readable reason when contact_removed is True
+
+
 class DiscoveryResultOut(BaseModel):
     profile: ProfileOut
     score: float
@@ -337,6 +344,7 @@ def send_connection_request(requester_id: str, recipient_id: str) -> ConnectionO
     if conn is None:
         code = {
             "blocked": status.HTTP_403_FORBIDDEN,
+            "contact_removed": status.HTTP_403_FORBIDDEN,  # AC#14
             "rate_limit_exceeded": status.HTTP_429_TOO_MANY_REQUESTS,
         }.get(reason or "", status.HTTP_422_UNPROCESSABLE_ENTITY)
         raise HTTPException(status_code=code, detail=reason)
@@ -388,6 +396,7 @@ def send_message(body: MessageIn) -> MessageOut:
             "blocked": status.HTTP_403_FORBIDDEN,
             "not_connected": status.HTTP_403_FORBIDDEN,
             "connection_pending": status.HTTP_403_FORBIDDEN,
+            "contact_removed": status.HTTP_403_FORBIDDEN,  # AC#14
         }.get(reason or "", status.HTTP_422_UNPROCESSABLE_ENTITY)
         raise HTTPException(status_code=code, detail=reason)
     return MessageOut(
@@ -513,4 +522,29 @@ def resolve_report(report_id: str, body: ResolveReportIn) -> ReportOut:
             "already_resolved": status.HTTP_409_CONFLICT,
         }.get(reason or "", status.HTTP_422_UNPROCESSABLE_ENTITY)
         raise HTTPException(status_code=code, detail=reason)
+    # AC#14: contact_removal outcome flags the reported person so they cannot
+    # send connection requests or messages to anyone from this point forward.
+    if body.outcome == ReportResolutionOutcome.CONTACT_REMOVAL:
+        if report.target_kind == ReportTargetKind.USER:
+            _profiles.set_contact_removed(report.target_id)
+        else:
+            # Report is against a message — flag the message's sender.
+            msg = _messages.find(report.target_id)
+            if msg is not None:
+                _profiles.set_contact_removed(msg.sender_id)
     return _report_out(report)
+
+
+@app.get("/profiles/{profile_id}/contact-status", response_model=ContactStatusOut)
+def get_contact_status(profile_id: str) -> ContactStatusOut:
+    """Return the contact removal status for a profile (AC#14).
+
+    When contact_removed is True the reason field carries the machine-readable
+    reason ("contact_removal") so callers can present an accurate message and
+    auditors can trace the decision.
+    """
+    removed = _profiles.is_contact_removed(profile_id)
+    return ContactStatusOut(
+        contact_removed=removed,
+        reason="contact_removal" if removed else None,
+    )

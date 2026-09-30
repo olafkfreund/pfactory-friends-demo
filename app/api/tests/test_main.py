@@ -572,3 +572,140 @@ def test_c11_report_with_optional_additional_text() -> None:
     )
     assert resp.status_code == 201
     assert resp.json()["additional_text"] == "extra context"  # trimmed
+
+
+# ---------------------------------------------------------------------------
+# C14 — Contact removal: reported person cannot send requests or messages
+# ---------------------------------------------------------------------------
+
+
+def _submit_report_and_resolve(
+    reporter_id: str,
+    target_id: str,
+    target_kind: str,
+    outcome: str,
+) -> None:
+    """Helper: submit a report against target_id then resolve it with outcome."""
+    submit_resp = client.post(
+        "/reports",
+        json={
+            "reporter_id": reporter_id,
+            "target_id": target_id,
+            "target_kind": target_kind,
+            "reason": "harassment",
+        },
+    )
+    assert submit_resp.status_code == 201, submit_resp.text
+    report_id = submit_resp.json()["id"]
+    resolve_resp = client.post(
+        f"/reports/{report_id}/resolve",
+        json={"outcome": outcome},
+    )
+    assert resolve_resp.status_code == 200, resolve_resp.text
+
+
+def test_c14_contact_removal_prevents_connection_request() -> None:
+    """A user reported and resolved as contact_removal cannot send connection requests (C14)."""
+    _make_profile(client, "c14-req-a", age=25)  # will be contact-removed
+    _make_profile(client, "c14-req-b", age=26)
+    _submit_report_and_resolve(
+        reporter_id="c14-reporter-req",
+        target_id="c14-req-a",
+        target_kind="user",
+        outcome="contact_removal",
+    )
+    resp = client.post("/connections?requester_id=c14-req-a&recipient_id=c14-req-b")
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "contact_removed"
+
+
+def test_c14_contact_removal_prevents_sending_message() -> None:
+    """A user resolved as contact_removal cannot send messages (C14)."""
+    _make_profile(client, "c14-msg-a", age=25)  # will be contact-removed
+    _make_profile(client, "c14-msg-b", age=26)
+    # Establish accepted connection first so the only barrier is contact removal
+    conn_resp = client.post("/connections?requester_id=c14-msg-b&recipient_id=c14-msg-a")
+    assert conn_resp.status_code == 201
+    conn_id = conn_resp.json()["id"]
+    client.post(f"/connections/{conn_id}/accept?acceptor_id=c14-msg-a")
+    # Apply contact removal to c14-msg-a
+    _submit_report_and_resolve(
+        reporter_id="c14-reporter-msg",
+        target_id="c14-msg-a",
+        target_kind="user",
+        outcome="contact_removal",
+    )
+    resp = client.post(
+        "/messages",
+        json={"sender_id": "c14-msg-a", "recipient_id": "c14-msg-b", "body": "hi"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "contact_removed"
+
+
+def test_c14_contact_removal_reason_is_machine_readable() -> None:
+    """The refusal reason for contact_removal is the string 'contact_removed' (C14, AC#20)."""
+    _make_profile(client, "c14-mr-a", age=25)
+    _make_profile(client, "c14-mr-b", age=26)
+    _submit_report_and_resolve(
+        reporter_id="c14-reporter-mr",
+        target_id="c14-mr-a",
+        target_kind="user",
+        outcome="contact_removal",
+    )
+    resp = client.post("/connections?requester_id=c14-mr-a&recipient_id=c14-mr-b")
+    assert resp.json()["detail"] == "contact_removed"
+
+
+def test_c14_no_action_does_not_restrict_contact() -> None:
+    """Resolving a report as no_action leaves the reported person able to send requests (C14)."""
+    _make_profile(client, "c14-na-a", age=25)
+    _make_profile(client, "c14-na-b", age=26)
+    _submit_report_and_resolve(
+        reporter_id="c14-reporter-na",
+        target_id="c14-na-a",
+        target_kind="user",
+        outcome="no_action",
+    )
+    resp = client.post("/connections?requester_id=c14-na-a&recipient_id=c14-na-b")
+    assert resp.status_code == 201
+
+
+def test_c14_warning_does_not_restrict_contact() -> None:
+    """Resolving a report as warning leaves the reported person able to send requests (C14)."""
+    _make_profile(client, "c14-warn-a", age=25)
+    _make_profile(client, "c14-warn-b", age=26)
+    _submit_report_and_resolve(
+        reporter_id="c14-reporter-warn",
+        target_id="c14-warn-a",
+        target_kind="user",
+        outcome="warning",
+    )
+    resp = client.post("/connections?requester_id=c14-warn-a&recipient_id=c14-warn-b")
+    assert resp.status_code == 201
+
+
+def test_c14_contact_status_endpoint_reports_removed_state() -> None:
+    """GET /profiles/{id}/contact-status returns contact_removed=True with reason after resolution (C14)."""
+    _make_profile(client, "c14-status-a", age=25)
+    _submit_report_and_resolve(
+        reporter_id="c14-reporter-status",
+        target_id="c14-status-a",
+        target_kind="user",
+        outcome="contact_removal",
+    )
+    resp = client.get("/profiles/c14-status-a/contact-status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["contact_removed"] is True
+    assert body["reason"] == "contact_removal"
+
+
+def test_c14_contact_status_endpoint_reports_not_removed_by_default() -> None:
+    """GET /profiles/{id}/contact-status returns contact_removed=False for a normal profile (C14)."""
+    _make_profile(client, "c14-status-ok", age=25)
+    resp = client.get("/profiles/c14-status-ok/contact-status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["contact_removed"] is False
+    assert body["reason"] is None

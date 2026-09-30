@@ -58,6 +58,8 @@ class ProfileStore:
         self._profiles: dict[str, Profile] = {}
         # blocked_by[blocker_id] = set of blocked_ids
         self._blocked_by: dict[str, set[str]] = {}
+        # contact_removed: profiles that have had contact removal applied (AC#14)
+        self._contact_removed: set[str] = set()
 
     def save(self, profile: Profile) -> None:
         """Persist profile (upsert semantics)."""
@@ -88,10 +90,25 @@ class ProfileStore:
         if profile is not None:
             profile.age_assurance_status = status
 
+    def set_contact_removed(self, profile_id: str) -> None:
+        """Flag a profile as contact-removed (AC#14).
+
+        Once set, the profile owner cannot send connection requests or messages
+        to anyone.  This is the enforcement side of the contact_removal
+        resolution outcome; the flag is set by the moderation layer when a
+        report is resolved as ReportResolutionOutcome.CONTACT_REMOVAL.
+        """
+        self._contact_removed.add(profile_id)
+
+    def is_contact_removed(self, profile_id: str) -> bool:
+        """Return True if this profile has been flagged for contact removal (AC#14)."""
+        return profile_id in self._contact_removed
+
     def delete(self, profile_id: str) -> None:
         """Delete the profile and all block records it owns (P1, P2)."""
         self._profiles.pop(profile_id, None)
         self._blocked_by.pop(profile_id, None)
+        self._contact_removed.discard(profile_id)
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +270,9 @@ class ConnectionStore:
             return None, "blank_id"
         if requester_id == recipient_id:
             return None, "self_request"
+        # AC#14: contact removal blocks all outbound requests.
+        if self._profile_store.is_contact_removed(requester_id):
+            return None, "contact_removed"
         # Single may_contact predicate — same check as discovery and messaging.
         if not may_contact(self._profile_store, requester_id, recipient_id):
             return None, "blocked"
@@ -336,6 +356,9 @@ class MessageStore:
         - "blank_body": body is blank or whitespace-only.
         - "body_too_long": body exceeds MAX_MESSAGE_LENGTH.
         """
+        # AC#14: contact removal blocks all outbound messages.
+        if self._profile_store.is_contact_removed(sender_id):
+            return None, "contact_removed"
         # AC#9: the pair must hold an ACCEPTED connection.
         # Distinguish between no connection and a pending connection so the
         # client can show the correct machine-readable reason for each state.
@@ -360,6 +383,10 @@ class MessageStore:
         self._next_id += 1
         self._messages.append(msg)
         return msg, None
+
+    def find(self, message_id: str) -> Message | None:
+        """Return a message by its id, or None if not found."""
+        return next((m for m in self._messages if m.id == message_id), None)
 
     def get_messages(self, user1: str, user2: str) -> list[Message]:
         """Return all messages between user1 and user2 in chronological order."""
