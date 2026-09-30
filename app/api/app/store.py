@@ -105,10 +105,26 @@ class ProfileStore:
         return profile_id in self._contact_removed
 
     def delete(self, profile_id: str) -> None:
-        """Delete the profile and all block records it owns (P1, P2)."""
+        """Delete the profile entry (P1, AC#15).
+
+        Block records are deliberately NOT removed: the retention policy keeps
+        blocks for 24 months after account closure because they are the record
+        that keeps a blocked person blocked.  The contact-removed flag is also
+        a safety flag and is left in place for the same reason.
+        """
         self._profiles.pop(profile_id, None)
-        self._blocked_by.pop(profile_id, None)
-        self._contact_removed.discard(profile_id)
+        # _blocked_by and _contact_removed are intentionally preserved — retained per policy.
+
+    def get_blocks_count(self, profile_id: str) -> int:
+        """Return the total number of block records that involve profile_id (AC#15).
+
+        Counts both directions: blocks *from* profile_id (outbound) and blocks
+        *against* profile_id (inbound), because the retention policy keeps all
+        of them after the account is closed.
+        """
+        outbound = len(self._blocked_by.get(profile_id, set()))
+        inbound = sum(1 for blocked_set in self._blocked_by.values() if profile_id in blocked_set)
+        return outbound + inbound
 
 
 # ---------------------------------------------------------------------------
@@ -396,6 +412,21 @@ class MessageStore:
             if (m.sender_id == user1 and m.recipient_id == user2)
             or (m.sender_id == user2 and m.recipient_id == user1)
         ]
+
+    def delete_messages_for(self, profile_id: str) -> int:
+        """Delete all messages sent by or addressed to profile_id (AC#15).
+
+        Returns the number of messages removed.  Per the spec, messages are
+        deleted on account deletion (the retention policy does NOT extend them
+        — only blocks and reports are retained post-closure).
+        """
+        before = len(self._messages)
+        self._messages = [
+            m
+            for m in self._messages
+            if m.sender_id != profile_id and m.recipient_id != profile_id
+        ]
+        return before - len(self._messages)
 
 
 # ---------------------------------------------------------------------------

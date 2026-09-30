@@ -142,6 +142,20 @@ class ContactStatusOut(BaseModel):
     reason: str | None = None  # machine-readable reason when contact_removed is True
 
 
+class AccountDeletionOut(BaseModel):
+    """Response body returned when an account is deleted (AC#15).
+
+    Reports what was removed and what was retained so the caller and any
+    auditor can confirm exactly what happened — no silent side-effects.
+    """
+
+    deleted_profile_id: str
+    deleted_interest_tags_count: int  # interests + activities removed with the profile
+    deleted_messages_count: int       # messages removed (not subject to retention)
+    retained_blocks_count: int        # block records kept per 24-month retention policy
+    retained_reports_count: int       # report records kept per 24-month retention policy
+
+
 class DiscoveryResultOut(BaseModel):
     profile: ProfileOut
     score: float
@@ -547,4 +561,56 @@ def get_contact_status(profile_id: str) -> ContactStatusOut:
     return ContactStatusOut(
         contact_removed=removed,
         reason="contact_removal" if removed else None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Account deletion
+# ---------------------------------------------------------------------------
+
+
+@app.delete("/profiles/{profile_id}", response_model=AccountDeletionOut)
+def delete_account(profile_id: str) -> AccountDeletionOut:
+    """Delete an account and report exactly what was removed and what was retained (AC#15).
+
+    Deleted (not subject to retention):
+    - Profile row (display name, bio, age, open_to_friends flag, …)
+    - Interest tags (interests + activities fields)
+    - Messages sent by or addressed to this account
+
+    Retained per the 24-month post-closure retention policy:
+    - Block records (either direction) — necessary to keep a blocked person blocked
+    - Reports filed by or against this account — necessary for trust and safety audit
+
+    The response names every category so the caller and any auditor can
+    confirm that nothing was silently kept or silently discarded (AC#15,
+    data-retention policy).
+    """
+    profile = _profiles.find(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="profile not found")
+
+    # Count interest tags (interests list + activities list) before deletion.
+    tags_count = len(profile.interests) + len(profile.activities)
+
+    # Count block records that will be retained (both directions).
+    blocks_count = _profiles.get_blocks_count(profile_id)
+
+    # Count reports that will be retained (filed by or against this account).
+    reports_against_ids = {r.id for r in _reports.get_reports_against(profile_id)}
+    reports_by_ids = {r.id for r in _reports.get_reports_by(profile_id)}
+    reports_count = len(reports_against_ids | reports_by_ids)
+
+    # Delete messages first (while the profile still exists for reference).
+    messages_deleted = _messages.delete_messages_for(profile_id)
+
+    # Delete the profile (blocks and reports are deliberately preserved).
+    _profiles.delete(profile_id)
+
+    return AccountDeletionOut(
+        deleted_profile_id=profile_id,
+        deleted_interest_tags_count=tags_count,
+        deleted_messages_count=messages_deleted,
+        retained_blocks_count=blocks_count,
+        retained_reports_count=reports_count,
     )
