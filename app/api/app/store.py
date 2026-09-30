@@ -29,6 +29,7 @@ from .domain import (
     Report,
     ReportReason,
     ReportTargetKind,
+    ReviewQueueStatus,
     age_bracket,
 )
 
@@ -394,8 +395,14 @@ class ReportStore:
         target_kind: ReportTargetKind,
         reason: ReportReason,
         additional_text: str = "",
+        immediate_harm: bool = False,
     ) -> Report | None:
-        """Submit a report; return None when validation fails."""
+        """Submit a report; return None when validation fails.
+
+        AC#12: every submitted report enters the queue in the ACCEPTED state.
+        Reports with immediate_harm=True will be ordered ahead of all others
+        in the review queue, regardless of submission time.
+        """
         if not reporter_id.strip() or not target_id.strip():
             return None
         trimmed = additional_text.strip()
@@ -408,10 +415,24 @@ class ReportStore:
             target_kind=target_kind,
             reason=reason,
             additional_text=trimmed,
+            immediate_harm=immediate_harm,
+            queue_status=ReviewQueueStatus.ACCEPTED,
         )
         self._next_id += 1
         self._reports.append(report)
         return report
+
+    def get_queue(self) -> list[Report]:
+        """Return all reports ordered for moderation review (AC#12).
+
+        Ordering:
+        1. Reports citing immediate risk of harm first (immediate_harm=True).
+        2. Within each tier, reports appear in submission order (FIFO).
+
+        Using a stable sort on a boolean key: False < True, so negate
+        immediate_harm to sort harm-flagged reports to the front.
+        """
+        return sorted(self._reports, key=lambda r: (not r.immediate_harm, self._reports.index(r)))
 
     def get_reports_against(self, target_id: str) -> list[Report]:
         return [r for r in self._reports if r.target_id == target_id]

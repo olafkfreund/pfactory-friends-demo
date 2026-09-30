@@ -23,6 +23,7 @@ from .domain import (
     AgeAssuranceStatus,
     GeoLocation,
     Profile,
+    Report,
     ReportReason,
     ReportTargetKind,
 )
@@ -107,6 +108,7 @@ class ReportIn(BaseModel):
     target_kind: ReportTargetKind
     reason: ReportReason
     additional_text: str = ""
+    immediate_harm: bool = False  # AC#12: flag for immediate risk of harm priority
 
 
 class ReportOut(BaseModel):
@@ -116,6 +118,8 @@ class ReportOut(BaseModel):
     target_kind: str
     reason: str
     additional_text: str
+    immediate_harm: bool  # AC#12
+    queue_status: str  # AC#12: always "accepted" on creation
 
 
 class DiscoveryResultOut(BaseModel):
@@ -420,21 +424,7 @@ def check_may_contact(a_id: str, b_id: str) -> dict[str, bool]:
 # ---------------------------------------------------------------------------
 
 
-@app.post("/reports", status_code=status.HTTP_201_CREATED, response_model=ReportOut)
-def submit_report(body: ReportIn) -> ReportOut:
-    """Submit a report (AC#8 / P5)."""
-    report = _reports.submit(
-        reporter_id=body.reporter_id,
-        target_id=body.target_id,
-        target_kind=body.target_kind,
-        reason=body.reason,
-        additional_text=body.additional_text,
-    )
-    if report is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="invalid report (blank id or additional_text too long)",
-        )
+def _report_out(report: Report) -> ReportOut:
     return ReportOut(
         id=report.id,
         reporter_id=report.reporter_id,
@@ -442,4 +432,41 @@ def submit_report(body: ReportIn) -> ReportOut:
         target_kind=report.target_kind.value,
         reason=report.reason.value,
         additional_text=report.additional_text,
+        immediate_harm=report.immediate_harm,
+        queue_status=report.queue_status.value,
     )
+
+
+@app.post("/reports", status_code=status.HTTP_201_CREATED, response_model=ReportOut)
+def submit_report(body: ReportIn) -> ReportOut:
+    """Submit a report (AC#8, AC#12 / P5).
+
+    The report enters the review queue in the 'accepted' state.
+    Setting immediate_harm=True places the report ahead of all non-harm reports
+    in the queue, regardless of when each was submitted (AC#12).
+    """
+    report = _reports.submit(
+        reporter_id=body.reporter_id,
+        target_id=body.target_id,
+        target_kind=body.target_kind,
+        reason=body.reason,
+        additional_text=body.additional_text,
+        immediate_harm=body.immediate_harm,
+    )
+    if report is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="invalid report (blank id or additional_text too long)",
+        )
+    return _report_out(report)
+
+
+@app.get("/reports/queue", response_model=list[ReportOut])
+def get_review_queue() -> list[ReportOut]:
+    """Return all reports in review-queue order (AC#12).
+
+    Reports citing an immediate risk of harm appear first; within each
+    tier reports are ordered by submission time (oldest first).
+    All reports are in the 'accepted' state on entry.
+    """
+    return [_report_out(r) for r in _reports.get_queue()]

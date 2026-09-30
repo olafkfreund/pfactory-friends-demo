@@ -72,6 +72,18 @@ class ReportTargetKind(str, Enum):
     MESSAGE = "message"
 
 
+class ReviewQueueStatus(str, Enum):
+    """State of a report in the moderation review queue (AC#12).
+
+    Every submitted report enters the queue in the ACCEPTED state.
+    A moderator then resolves it (AC#13) to one of the resolution states.
+
+    Ported from lanes/kotlin-core/src/main/kotlin/ReviewQueue.kt.
+    """
+
+    ACCEPTED = "accepted"  # initial state: report received, awaiting review
+
+
 VALID_SEARCH_RADII: frozenset[int] = frozenset({1, 5, 10, 25})  # kilometres (AC#3)
 
 
@@ -171,12 +183,16 @@ class DiscoveryResult:
 
 @dataclass
 class Report:
-    """A report filed by reporter_id against a target (AC#8).
+    """A report filed by reporter_id against a target (AC#8, AC#12).
 
     Ported from lanes/kotlin-core/src/main/kotlin/Report.kt.
 
     P5 (constitution, enforceable): every person-to-person surface ships with
     reporting in the same phase as the feature that creates the data.
+
+    AC#12: every submitted report enters the review queue in the ACCEPTED state.
+    Reports with immediate_harm=True are ordered ahead of all others in the
+    queue, regardless of submission time.
     """
 
     id: str
@@ -185,3 +201,7 @@ class Report:
     target_kind: ReportTargetKind
     reason: ReportReason
     additional_text: str = ""
+    immediate_harm: bool = False  # AC#12: cite immediate risk of harm for priority queuing
+    queue_status: ReviewQueueStatus = field(
+        default=ReviewQueueStatus.ACCEPTED
+    )  # AC#12: enters queue in accepted state
