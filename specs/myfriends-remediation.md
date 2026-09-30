@@ -27,11 +27,29 @@ declares no database dependency of any kind.
 Unchanged from the original brief: adults 18 and over, and 16-17 year olds as a
 protected minority whose data is separated from adults'.
 
+## Jurisdictions
+
+Unchanged from the original brief. The application processes personal data in:
+
+- United Kingdom (UK GDPR and the Data Protection Act 2018)
+- European Union, launching in Ireland, Germany and the Netherlands (GDPR)
+- United States, California first (CCPA/CPRA)
+
+The 16-17 age bracket is why these matter here rather than being boilerplate:
+the authorisation defect below means any caller can currently grant another
+person's age assurance, which is the control that separates minors from adults.
+
 ## Platform
 
 Unchanged: FastAPI backend, React/TypeScript frontend, deployed into the
-cluster. No new services, no new languages. Postgres is already available in the
-cluster; the application must use it rather than ship its own.
+existing Kubernetes cluster. No new services, no new languages, and **no new
+infrastructure is provisioned** by this work.
+
+Postgres already runs in the cluster as the `postgres-0` StatefulSet and already
+serves the factory's own services. The application connects to it as another
+client and creates its own tables there. Nothing here creates a managed database
+instance, an RDS instance, or any other cloud resource; there is no cloud
+provider in this path at all.
 
 ## Acceptance Criteria
 
