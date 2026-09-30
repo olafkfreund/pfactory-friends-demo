@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 87
 author: olafkfreund
 ---
@@ -75,6 +75,25 @@ drove the real UI against the real deployment.
 - **It must not depend on fixes that have not landed.** TFactory#1341 is
   currently in flight; until it does, a verification run discards its own
   output, so the sequencing has to account for that rather than hope.
+
+## Approved answers (2026-09-30)
+
+1. **FastAPI**, with the Kotlin core as the written specification of each rule
+   rather than a dependency. The demo's value is the governed pipeline, not code
+   reuse, and FastAPI is the fleet's most exercised path.
+2. **Postgres.** In-memory would make the retention and deletion criteria
+   untestable, and those are exactly what the compliance gate refused the
+   original brief over.
+3. **Real authentication via Keycloak**, which is already deployed. The rules are
+   about who may see and contact whom; a stub makes the central criteria
+   unverifiable.
+4. **The Kotlin core stops being a second source of truth.** It stays in the
+   repository as the historical artefact it is — the proof that the Kotlin lane
+   executes — and the backend becomes the single implementation of the rules.
+   Two implementations of one compliance rule is the shape that produced #86.
+5. **Behind the same oauth2-proxy as CFactory.** It is a public hostname on a
+   real domain serving a fictional social product; login-gated is the honest
+   default, and it exercises the auth path the criteria depend on.
 
 ## Open questions
 
