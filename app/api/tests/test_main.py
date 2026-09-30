@@ -261,3 +261,206 @@ def test_c8_rate_limit_response_carries_machine_readable_reason() -> None:
     assert resp.status_code == 429
     detail = resp.json()["detail"]
     assert detail == "rate_limit_exceeded"
+
+
+# ---------------------------------------------------------------------------
+# C9 — Messages require an accepted connection
+# ---------------------------------------------------------------------------
+
+
+def test_c9_message_refused_when_not_connected() -> None:
+    """POST /messages is refused with 'not_connected' when there is no connection (C9)."""
+    _make_profile(client, "c9-nc-a", age=25)
+    _make_profile(client, "c9-nc-b", age=26)
+    resp = client.post(
+        "/messages", json={"sender_id": "c9-nc-a", "recipient_id": "c9-nc-b", "body": "hi"}
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "not_connected"
+
+
+def test_c9_message_refused_when_connection_pending() -> None:
+    """POST /messages is refused with 'connection_pending' when the connection has not been accepted (C9)."""
+    _make_profile(client, "c9-pend-a", age=25)
+    _make_profile(client, "c9-pend-b", age=26)
+    client.post("/connections?requester_id=c9-pend-a&recipient_id=c9-pend-b")
+    resp = client.post(
+        "/messages",
+        json={"sender_id": "c9-pend-a", "recipient_id": "c9-pend-b", "body": "hi"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "connection_pending"
+
+
+def test_c9_message_allowed_after_accepted_connection() -> None:
+    """POST /messages succeeds after both parties have accepted the connection (C9)."""
+    _make_profile(client, "c9-ok-a", age=25)
+    _make_profile(client, "c9-ok-b", age=26)
+    send_resp = client.post("/connections?requester_id=c9-ok-a&recipient_id=c9-ok-b")
+    conn_id = send_resp.json()["id"]
+    client.post(f"/connections/{conn_id}/accept?acceptor_id=c9-ok-b")
+    resp = client.post(
+        "/messages",
+        json={"sender_id": "c9-ok-a", "recipient_id": "c9-ok-b", "body": "hello"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["body"] == "hello"
+
+
+# ---------------------------------------------------------------------------
+# C10 — Symmetric blocking: neither party can discover, request, nor message
+# ---------------------------------------------------------------------------
+
+
+def _setup_connected_pair(
+    id_a: str, id_b: str, age_a: int = 25, age_b: int = 26
+) -> str:
+    """Create two profiles, send and accept a connection, return the connection id."""
+    _make_profile(client, id_a, age=age_a)
+    _make_profile(client, id_b, age=age_b)
+    send_resp = client.post(f"/connections?requester_id={id_a}&recipient_id={id_b}")
+    assert send_resp.status_code == 201, send_resp.text
+    conn_id = send_resp.json()["id"]
+    accept_resp = client.post(f"/connections/{conn_id}/accept?acceptor_id={id_b}")
+    assert accept_resp.status_code == 200, accept_resp.text
+    return conn_id
+
+
+def test_c10_block_endpoint_records_block() -> None:
+    """POST /blocks creates a block (C10)."""
+    _make_profile(client, "c10-blk-a", age=25)
+    _make_profile(client, "c10-blk-b", age=26)
+    resp = client.post("/blocks", json={"blocker_id": "c10-blk-a", "blocked_id": "c10-blk-b"})
+    assert resp.status_code == 204
+
+
+def test_c10_check_block_endpoint() -> None:
+    """GET /blocks confirms the block is recorded in both relevant directions (C10)."""
+    _make_profile(client, "c10-chk-a", age=25)
+    _make_profile(client, "c10-chk-b", age=26)
+    client.post("/blocks", json={"blocker_id": "c10-chk-a", "blocked_id": "c10-chk-b"})
+    # The block was set a→b; the symmetric check is via may-contact
+    resp_ab = client.get("/blocks/c10-chk-a/c10-chk-b")
+    assert resp_ab.status_code == 200
+    assert resp_ab.json()["blocked"] is True
+
+
+def test_c10_may_contact_is_false_for_both_directions_after_block() -> None:
+    """GET /may-contact returns False for both a→b and b→a after a blocks b (C10)."""
+    _make_profile(client, "c10-mc-a", age=25)
+    _make_profile(client, "c10-mc-b", age=26)
+    client.post("/blocks", json={"blocker_id": "c10-mc-a", "blocked_id": "c10-mc-b"})
+    resp_ab = client.get("/may-contact/c10-mc-a/c10-mc-b")
+    assert resp_ab.json()["may_contact"] is False
+    resp_ba = client.get("/may-contact/c10-mc-b/c10-mc-a")
+    assert resp_ba.json()["may_contact"] is False
+
+
+def test_c10_blocked_person_cannot_send_request_to_blocker() -> None:
+    """After A blocks B, B cannot send a connection request to A (C10 — symmetric)."""
+    _make_profile(client, "c10-req-a", age=25)
+    _make_profile(client, "c10-req-b", age=26)
+    client.post("/blocks", json={"blocker_id": "c10-req-a", "blocked_id": "c10-req-b"})
+    resp = client.post("/connections?requester_id=c10-req-b&recipient_id=c10-req-a")
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "blocked"
+
+
+def test_c10_blocker_cannot_send_request_to_blocked_person() -> None:
+    """After A blocks B, A cannot send a connection request to B (C10)."""
+    _make_profile(client, "c10-req-c", age=25)
+    _make_profile(client, "c10-req-d", age=26)
+    client.post("/blocks", json={"blocker_id": "c10-req-c", "blocked_id": "c10-req-d"})
+    resp = client.post("/connections?requester_id=c10-req-c&recipient_id=c10-req-d")
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "blocked"
+
+
+def test_c10_block_reason_same_in_both_request_directions() -> None:
+    """The reason code 'blocked' is identical regardless of which party sends the request (C10, AC#20)."""
+    _make_profile(client, "c10-sym-req-a", age=25)
+    _make_profile(client, "c10-sym-req-b", age=26)
+    client.post("/blocks", json={"blocker_id": "c10-sym-req-a", "blocked_id": "c10-sym-req-b"})
+    resp_ab = client.post("/connections?requester_id=c10-sym-req-a&recipient_id=c10-sym-req-b")
+    resp_ba = client.post("/connections?requester_id=c10-sym-req-b&recipient_id=c10-sym-req-a")
+    assert resp_ab.json()["detail"] == resp_ba.json()["detail"] == "blocked"
+
+
+def test_c10_blocked_person_cannot_message_blocker() -> None:
+    """After A blocks B (post-connection), B cannot send a message to A (C10 — symmetric)."""
+    _setup_connected_pair("c10-msg-a", "c10-msg-b")
+    client.post("/blocks", json={"blocker_id": "c10-msg-a", "blocked_id": "c10-msg-b"})
+    resp = client.post(
+        "/messages",
+        json={"sender_id": "c10-msg-b", "recipient_id": "c10-msg-a", "body": "hi from b"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "blocked"
+
+
+def test_c10_blocker_cannot_message_blocked_person() -> None:
+    """After A blocks B (post-connection), A cannot send a message to B (C10)."""
+    _setup_connected_pair("c10-msg-c", "c10-msg-d")
+    client.post("/blocks", json={"blocker_id": "c10-msg-c", "blocked_id": "c10-msg-d"})
+    resp = client.post(
+        "/messages",
+        json={"sender_id": "c10-msg-c", "recipient_id": "c10-msg-d", "body": "hi from c"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "blocked"
+
+
+def test_c10_block_reason_same_in_both_message_directions() -> None:
+    """The reason code 'blocked' is identical regardless of which party sends the message (C10, AC#20)."""
+    _setup_connected_pair("c10-sym-msg-a", "c10-sym-msg-b")
+    client.post(
+        "/blocks", json={"blocker_id": "c10-sym-msg-a", "blocked_id": "c10-sym-msg-b"}
+    )
+    resp_ab = client.post(
+        "/messages",
+        json={"sender_id": "c10-sym-msg-a", "recipient_id": "c10-sym-msg-b", "body": "x"},
+    )
+    resp_ba = client.post(
+        "/messages",
+        json={"sender_id": "c10-sym-msg-b", "recipient_id": "c10-sym-msg-a", "body": "y"},
+    )
+    assert resp_ab.json()["detail"] == resp_ba.json()["detail"] == "blocked"
+
+
+def test_c10_blocked_person_absent_from_blocker_discovery() -> None:
+    """After A blocks B, B does not appear in A's discovery results (C10)."""
+    _make_profile(
+        client, "c10-disc-a", age=25, open_to_friends=True, interests=["hiking"]
+    )
+    _make_profile(
+        client, "c10-disc-b", age=26, open_to_friends=True, interests=["hiking"]
+    )
+    _pass_age_assurance(client, "c10-disc-a")
+    _pass_age_assurance(client, "c10-disc-b")
+    # Without block, b appears in a's discovery
+    resp_before = client.get("/discovery/c10-disc-a?radius_km=25")
+    assert any(r["profile"]["id"] == "c10-disc-b" for r in resp_before.json())
+    # Block: a blocks b
+    client.post("/blocks", json={"blocker_id": "c10-disc-a", "blocked_id": "c10-disc-b"})
+    resp_after = client.get("/discovery/c10-disc-a?radius_km=25")
+    assert not any(r["profile"]["id"] == "c10-disc-b" for r in resp_after.json())
+
+
+def test_c10_blocker_absent_from_blocked_persons_discovery() -> None:
+    """After A blocks B, A does not appear in B's discovery results either (C10 — symmetric)."""
+    _make_profile(
+        client, "c10-disc-c", age=25, open_to_friends=True, interests=["hiking"]
+    )
+    _make_profile(
+        client, "c10-disc-d", age=26, open_to_friends=True, interests=["hiking"]
+    )
+    _pass_age_assurance(client, "c10-disc-c")
+    _pass_age_assurance(client, "c10-disc-d")
+    # Without block, c appears in d's discovery
+    resp_before = client.get("/discovery/c10-disc-d?radius_km=25")
+    assert any(r["profile"]["id"] == "c10-disc-c" for r in resp_before.json())
+    # Block: c blocks d
+    client.post("/blocks", json={"blocker_id": "c10-disc-c", "blocked_id": "c10-disc-d"})
+    # c (the blocker) must also be absent from d's results
+    resp_after = client.get("/discovery/c10-disc-d?radius_km=25")
+    assert not any(r["profile"]["id"] == "c10-disc-c" for r in resp_after.json())
