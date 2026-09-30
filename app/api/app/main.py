@@ -206,7 +206,12 @@ def get_profile(profile_id: str) -> ProfileOut:
 
 @app.patch("/profiles/{profile_id}/availability", response_model=ProfileOut)
 def toggle_availability(profile_id: str, open_to_friends: bool) -> ProfileOut:
-    """Toggle the 'open to new friends' status (AC#2)."""
+    """Toggle the 'open to new friends' status (AC#6).
+
+    Turning it off removes the profile from every other person's discovery
+    results on the next query (the discover() function filters open_to_friends).
+    All other profile fields — including age_assurance_status — are preserved.
+    """
     profile = _profiles.find(profile_id)
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="profile not found")
@@ -219,6 +224,7 @@ def toggle_availability(profile_id: str, open_to_friends: bool) -> ProfileOut:
         age=profile.age,
         open_to_friends=open_to_friends,
         location=profile.location,
+        age_assurance_status=profile.age_assurance_status,  # AC#6: preserve assurance status
     )
     _profiles.save(updated)
     return _profile_out(updated)
