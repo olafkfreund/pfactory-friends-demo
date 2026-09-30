@@ -805,3 +805,252 @@ class TestAgeAssurance:
             "/profiles/aa-api-unr/age-assurance", json={"status": "unrecorded"}
         )
         assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# C7: Discovery with match score ordered by shared interest tags
+# ---------------------------------------------------------------------------
+
+
+class TestC7DiscoveryMatchScore:
+    """C7: Discovery returns only people who currently have 'open to new friends'
+    turned on, ordered by a match score computed from shared interest tags, and
+    the API returns the score with each result.
+
+    Three requirements:
+    1. Only open_to_friends=True candidates appear in results.
+    2. The match score is computed from shared interest tags; a candidate who
+       shares more tags ranks higher than one who shares fewer.
+    3. The score field is present in every DiscoveryResult returned by the API.
+    """
+
+    # --- Domain / store tests ---
+
+    def test_only_open_profiles_in_results(self) -> None:
+        """discover() excludes profiles with open_to_friends=False (C7 / AC#2)."""
+        store = ProfileStore()
+        searcher = _make_profile(
+            id="c7-s1", open_to_friends=True, age=25, interests=["reading"]
+        )
+        open_p = _make_profile(
+            id="c7-open", open_to_friends=True, age=30, interests=["reading"]
+        )
+        closed_p = _make_profile(
+            id="c7-closed", open_to_friends=False, age=30, interests=["reading"]
+        )
+        store.save(searcher)
+        store.save(open_p)
+        store.save(closed_p)
+        store.set_age_assurance("c7-open", AgeAssuranceStatus.PASSED)
+        store.set_age_assurance("c7-closed", AgeAssuranceStatus.PASSED)
+        results = discover(store, searcher)
+        ids = [r.profile.id for r in results]
+        assert "c7-open" in ids
+        assert "c7-closed" not in ids
+
+    def test_score_is_fraction_of_shared_interests(self) -> None:
+        """Score equals the fraction of the searcher's interests shared by the
+        candidate when the searcher carries no activities (C7)."""
+        store = ProfileStore()
+        searcher = _make_profile(
+            id="c7-s2", open_to_friends=True, age=25, interests=["a", "b", "c"]
+        )
+        # Candidate shares 2 of 3 interests → score = 2/3 ≈ 0.667
+        candidate = _make_profile(
+            id="c7-c2", open_to_friends=True, age=30, interests=["a", "b", "z"]
+        )
+        store.save(searcher)
+        store.save(candidate)
+        store.set_age_assurance("c7-c2", AgeAssuranceStatus.PASSED)
+        results = discover(store, searcher)
+        assert len(results) == 1
+        expected_score = 2 / 3
+        assert abs(results[0].score - expected_score) < 1e-9
+
+    def test_shared_interests_populated_in_result(self) -> None:
+        """shared_interests in DiscoveryResult lists the common interest tags (C7)."""
+        store = ProfileStore()
+        searcher = _make_profile(
+            id="c7-s3", open_to_friends=True, age=25, interests=["hiking", "reading", "cooking"]
+        )
+        candidate = _make_profile(
+            id="c7-c3", open_to_friends=True, age=30, interests=["hiking", "cooking", "gaming"]
+        )
+        store.save(searcher)
+        store.save(candidate)
+        store.set_age_assurance("c7-c3", AgeAssuranceStatus.PASSED)
+        results = discover(store, searcher)
+        assert len(results) == 1
+        shared = sorted(results[0].shared_interests)
+        assert shared == ["cooking", "hiking"]
+
+    def test_results_ordered_by_interest_score_descending(self) -> None:
+        """Higher interest overlap ranks first in discovery results (C7)."""
+        store = ProfileStore()
+        searcher = _make_profile(
+            id="c7-s4", open_to_friends=True, age=25, interests=["a", "b", "c", "d"]
+        )
+        # best: shares 4/4 → score 1.0
+        best = _make_profile(
+            id="c7-best", open_to_friends=True, age=26, interests=["a", "b", "c", "d"]
+        )
+        # middle: shares 2/4 → score 0.5
+        middle = _make_profile(
+            id="c7-mid", open_to_friends=True, age=27, interests=["a", "b", "x", "y"]
+        )
+        # worst: shares 0/4 → score 0.0
+        worst = _make_profile(
+            id="c7-worst", open_to_friends=True, age=28, interests=["p", "q", "r", "s"]
+        )
+        store.save(searcher)
+        store.save(best)
+        store.save(middle)
+        store.save(worst)
+        for pid in ("c7-best", "c7-mid", "c7-worst"):
+            store.set_age_assurance(pid, AgeAssuranceStatus.PASSED)
+        results = discover(store, searcher)
+        ids = [r.profile.id for r in results]
+        assert ids.index("c7-best") < ids.index("c7-mid")
+        assert ids.index("c7-mid") < ids.index("c7-worst")
+
+    def test_zero_score_when_no_shared_interests(self) -> None:
+        """Score is 0.0 when no interest tags overlap (C7)."""
+        store = ProfileStore()
+        searcher = _make_profile(
+            id="c7-s5", open_to_friends=True, age=25, interests=["a", "b"]
+        )
+        candidate = _make_profile(
+            id="c7-c5", open_to_friends=True, age=30, interests=["x", "y"]
+        )
+        store.save(searcher)
+        store.save(candidate)
+        store.set_age_assurance("c7-c5", AgeAssuranceStatus.PASSED)
+        results = discover(store, searcher)
+        assert len(results) == 1
+        assert results[0].score == 0.0
+
+    def test_full_score_when_all_interests_shared(self) -> None:
+        """Score is 1.0 when the candidate shares all of the searcher's interests (C7)."""
+        store = ProfileStore()
+        searcher = _make_profile(
+            id="c7-s6", open_to_friends=True, age=25, interests=["hiking", "cooking"]
+        )
+        candidate = _make_profile(
+            id="c7-c6", open_to_friends=True, age=30, interests=["hiking", "cooking", "extra"]
+        )
+        store.save(searcher)
+        store.save(candidate)
+        store.set_age_assurance("c7-c6", AgeAssuranceStatus.PASSED)
+        results = discover(store, searcher)
+        assert len(results) == 1
+        assert results[0].score == 1.0
+
+    # --- API-level tests ---
+
+    def test_api_score_field_present_in_each_result(self) -> None:
+        """Each discovery result JSON object carries a 'score' key (C7)."""
+        # Searcher
+        client.post(
+            "/profiles",
+            json={"id": "c7-api-s1", "display_name": "Searcher", "age": 25,
+                  "open_to_friends": True, "interests": ["music", "sport"]},
+        )
+        client.post("/profiles/c7-api-s1/age-assurance", json={"status": "passed"})
+        # Candidate
+        client.post(
+            "/profiles",
+            json={"id": "c7-api-c1", "display_name": "Candidate", "age": 26,
+                  "open_to_friends": True, "interests": ["music"]},
+        )
+        client.post("/profiles/c7-api-c1/age-assurance", json={"status": "passed"})
+        resp = client.get("/discovery/c7-api-s1?radius_km=25")
+        assert resp.status_code == 200
+        results = resp.json()
+        assert len(results) >= 1
+        for r in results:
+            assert "score" in r
+            assert isinstance(r["score"], float)
+
+    def test_api_score_value_reflects_shared_interests(self) -> None:
+        """The score returned by the API equals the interest-overlap fraction (C7)."""
+        client.post(
+            "/profiles",
+            json={"id": "c7-api-s2", "display_name": "Searcher2", "age": 25,
+                  "open_to_friends": True, "interests": ["a", "b", "c"]},
+        )
+        client.post("/profiles/c7-api-s2/age-assurance", json={"status": "passed"})
+        # Candidate shares 1 of 3 → score ≈ 0.333
+        client.post(
+            "/profiles",
+            json={"id": "c7-api-c2", "display_name": "Candidate2", "age": 26,
+                  "open_to_friends": True, "interests": ["a", "x", "y"]},
+        )
+        client.post("/profiles/c7-api-c2/age-assurance", json={"status": "passed"})
+        resp = client.get("/discovery/c7-api-s2?radius_km=25")
+        assert resp.status_code == 200
+        results = {r["profile"]["id"]: r for r in resp.json()}
+        assert "c7-api-c2" in results
+        expected = 1 / 3
+        assert abs(results["c7-api-c2"]["score"] - expected) < 1e-9
+
+    def test_api_results_ordered_by_score_descending(self) -> None:
+        """The API returns results with the highest score first (C7)."""
+        client.post(
+            "/profiles",
+            json={"id": "c7-api-s3", "display_name": "Searcher3", "age": 25,
+                  "open_to_friends": True, "interests": ["a", "b", "c"]},
+        )
+        client.post("/profiles/c7-api-s3/age-assurance", json={"status": "passed"})
+        # High-match candidate: shares 3/3
+        client.post(
+            "/profiles",
+            json={"id": "c7-api-high", "display_name": "HighMatch", "age": 26,
+                  "open_to_friends": True, "interests": ["a", "b", "c"]},
+        )
+        client.post("/profiles/c7-api-high/age-assurance", json={"status": "passed"})
+        # Low-match candidate: shares 0/3
+        client.post(
+            "/profiles",
+            json={"id": "c7-api-low", "display_name": "LowMatch", "age": 27,
+                  "open_to_friends": True, "interests": ["x", "y", "z"]},
+        )
+        client.post("/profiles/c7-api-low/age-assurance", json={"status": "passed"})
+        resp = client.get("/discovery/c7-api-s3?radius_km=25")
+        assert resp.status_code == 200
+        results = resp.json()
+        scores = [r["score"] for r in results]
+        # Verify non-increasing order
+        for i in range(len(scores) - 1):
+            assert scores[i] >= scores[i + 1]
+
+    def test_api_closed_profile_excluded_score_not_affected(self) -> None:
+        """A closed profile is excluded; remaining open results still include scores (C7)."""
+        client.post(
+            "/profiles",
+            json={"id": "c7-api-s4", "display_name": "Searcher4", "age": 25,
+                  "open_to_friends": True, "interests": ["hiking"]},
+        )
+        client.post("/profiles/c7-api-s4/age-assurance", json={"status": "passed"})
+        # Open candidate — should appear
+        client.post(
+            "/profiles",
+            json={"id": "c7-api-open", "display_name": "OpenUser", "age": 26,
+                  "open_to_friends": True, "interests": ["hiking"]},
+        )
+        client.post("/profiles/c7-api-open/age-assurance", json={"status": "passed"})
+        # Closed candidate — must not appear
+        client.post(
+            "/profiles",
+            json={"id": "c7-api-closed2", "display_name": "ClosedUser", "age": 27,
+                  "open_to_friends": False, "interests": ["hiking"]},
+        )
+        client.post("/profiles/c7-api-closed2/age-assurance", json={"status": "passed"})
+        resp = client.get("/discovery/c7-api-s4?radius_km=25")
+        assert resp.status_code == 200
+        results = resp.json()
+        ids = [r["profile"]["id"] for r in results]
+        assert "c7-api-open" in ids
+        assert "c7-api-closed2" not in ids
+        # All returned results have a score
+        for r in results:
+            assert "score" in r
