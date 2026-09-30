@@ -709,3 +709,71 @@ def test_c14_contact_status_endpoint_reports_not_removed_by_default() -> None:
     body = resp.json()
     assert body["contact_removed"] is False
     assert body["reason"] is None
+
+
+# ---------------------------------------------------------------------------
+# C16 — Retention policy endpoint (single readable source of truth)
+# ---------------------------------------------------------------------------
+
+
+def test_c16_retention_policy_endpoint_returns_200() -> None:
+    """GET /retention-policy returns HTTP 200 (C16)."""
+    resp = client.get("/retention-policy")
+    assert resp.status_code == 200
+
+
+def test_c16_retention_policy_messages_24_months() -> None:
+    """Retention policy specifies messages are kept for 24 months (C16)."""
+    resp = client.get("/retention-policy")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["messages_months"] == 24
+
+
+def test_c16_retention_policy_blocks_24_months() -> None:
+    """Retention policy specifies blocks are kept for 24 months after closure (C16)."""
+    resp = client.get("/retention-policy")
+    body = resp.json()
+    assert body["blocks_months"] == 24
+
+
+def test_c16_retention_policy_reports_24_months() -> None:
+    """Retention policy specifies reports are kept for 24 months after closure (C16)."""
+    resp = client.get("/retention-policy")
+    body = resp.json()
+    assert body["reports_months"] == 24
+
+
+def test_c16_retention_policy_other_30_days() -> None:
+    """Retention policy specifies everything else is purged within 30 days of deletion (C16)."""
+    resp = client.get("/retention-policy")
+    body = resp.json()
+    assert body["other_days"] == 30
+
+
+def test_c16_retention_policy_has_description() -> None:
+    """Retention policy response includes human-readable description for each category (C16)."""
+    resp = client.get("/retention-policy")
+    body = resp.json()
+    desc = body["description"]
+    assert "messages" in desc
+    assert "blocks" in desc
+    assert "reports" in desc
+    assert "other" in desc
+    # Descriptions mention the specific durations
+    assert "24" in desc["messages"]
+    assert "24" in desc["blocks"]
+    assert "24" in desc["reports"]
+    assert "30" in desc["other"]
+
+
+def test_c16_retention_policy_source_of_truth_matches_constants() -> None:
+    """The endpoint values match the RETENTION_POLICY constants in retention.py (C16)."""
+    from app.retention import RETENTION_POLICY
+
+    resp = client.get("/retention-policy")
+    body = resp.json()
+    assert body["messages_months"] == RETENTION_POLICY.messages_months
+    assert body["blocks_months"] == RETENTION_POLICY.blocks_months
+    assert body["reports_months"] == RETENTION_POLICY.reports_months
+    assert body["other_days"] == RETENTION_POLICY.other_days

@@ -28,6 +28,7 @@ from .domain import (
     ReportResolutionOutcome,
     ReportTargetKind,
 )
+from .retention import RETENTION_POLICY
 from .store import (
     ConnectionStore,
     MessageStore,
@@ -154,6 +155,20 @@ class AccountDeletionOut(BaseModel):
     deleted_messages_count: int       # messages removed (not subject to retention)
     retained_blocks_count: int        # block records kept per 24-month retention policy
     retained_reports_count: int       # report records kept per 24-month retention policy
+
+
+class RetentionPolicyOut(BaseModel):
+    """Data-retention policy response (C16).
+
+    All durations readable from this one endpoint — the backend's single
+    source of truth for how long each category of data is kept.
+    """
+
+    messages_months: int
+    blocks_months: int
+    reports_months: int
+    other_days: int
+    description: dict[str, str]
 
 
 class DiscoveryResultOut(BaseModel):
@@ -613,4 +628,45 @@ def delete_account(profile_id: str) -> AccountDeletionOut:
         deleted_messages_count=messages_deleted,
         retained_blocks_count=blocks_count,
         retained_reports_count=reports_count,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Retention policy (C16)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/retention-policy", response_model=RetentionPolicyOut)
+def get_retention_policy() -> RetentionPolicyOut:
+    """Return the platform data-retention policy (C16).
+
+    All retention durations are defined in app/retention.py and surfaced here.
+    This is the single place in the backend where the policy is readable:
+
+    - Messages: kept for 24 months from account closure.
+    - Blocks:   kept for 24 months after closure.
+    - Reports:  kept for 24 months after closure.
+    - Other:    profile, interest tags, connections and everything else is
+                purged within 30 days of account deletion.
+    """
+    return RetentionPolicyOut(
+        messages_months=RETENTION_POLICY.messages_months,
+        blocks_months=RETENTION_POLICY.blocks_months,
+        reports_months=RETENTION_POLICY.reports_months,
+        other_days=RETENTION_POLICY.other_days,
+        description={
+            "messages": (
+                f"Kept for {RETENTION_POLICY.messages_months} months from account closure."
+            ),
+            "blocks": (
+                f"Kept for {RETENTION_POLICY.blocks_months} months after closure."
+            ),
+            "reports": (
+                f"Kept for {RETENTION_POLICY.reports_months} months after closure."
+            ),
+            "other": (
+                f"Profile, tags, connections and all other personal data purged "
+                f"within {RETENTION_POLICY.other_days} days of deletion."
+            ),
+        },
     )
