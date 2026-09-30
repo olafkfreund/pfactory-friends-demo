@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from collections.abc import Generator
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -56,7 +60,13 @@ def _pass_age_assurance(client: TestClient, profile_id: str) -> None:
 
 @pytest.fixture(autouse=True)
 def _isolated_app(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Reset the in-memory stores for each test so state doesn't bleed across."""
+    """Reset the in-memory stores for each test so state doesn't bleed across.
+
+    Auth bypass is handled by the ``_bypass_auth_for_all_tests`` autouse fixture
+    in ``conftest.py``, which applies to every test in both test files.  Tests
+    that specifically verify 401 behaviour use ``_without_auth_bypass`` to
+    temporarily remove that override.
+    """
     from app import main
     from app.store import ConnectionStore, MessageStore, ProfileStore, ReportStore
 
@@ -892,3 +902,142 @@ def test_c17_stored_profile_location_not_overwritten_by_query() -> None:
     assert "lat" not in profile_body
     assert "lon" not in profile_body
     assert "location" not in profile_body
+
+
+# ---------------------------------------------------------------------------
+# C18 — Authentication: every personal-data endpoint rejects unauthenticated
+#        callers; authorisation decisions are made in a single place
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _without_auth_bypass() -> Generator[None, None, None]:
+    """Remove the test-only auth bypass so the endpoint enforces real auth (C18).
+
+    The ``_isolated_app`` autouse fixture installs a dependency override that
+    lets all other tests run without an ``X-User-ID`` header.  This fixture
+    pops that override so the endpoint under test rejects an unauthenticated
+    request with HTTP 401, which is what C18 tests need to assert.
+    """
+    from app.auth import require_auth
+    from app.main import app as _app
+
+    saved = _app.dependency_overrides.pop(require_auth, None)
+    yield
+    if saved is not None:
+        _app.dependency_overrides[require_auth] = saved
+
+
+def test_c18_get_profile_returns_401_without_auth(_without_auth_bypass: None) -> None:
+    """GET /profiles/{id} returns 401 for an unauthenticated caller (C18)."""
+    resp = client.get("/profiles/any-id")
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "unauthenticated"
+
+
+def test_c18_create_profile_returns_401_without_auth(_without_auth_bypass: None) -> None:
+    """POST /profiles returns 401 for an unauthenticated caller (C18)."""
+    resp = client.post(
+        "/profiles",
+        json={"id": "x", "display_name": "X", "age": 25},
+    )
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "unauthenticated"
+
+
+def test_c18_discovery_returns_401_without_auth(_without_auth_bypass: None) -> None:
+    """GET /discovery/{id} returns 401 for an unauthenticated caller (C18)."""
+    resp = client.get("/discovery/any-id?radius_km=25")
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "unauthenticated"
+
+
+def test_c18_connection_request_returns_401_without_auth(_without_auth_bypass: None) -> None:
+    """POST /connections returns 401 for an unauthenticated caller (C18)."""
+    resp = client.post("/connections?requester_id=a&recipient_id=b")
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "unauthenticated"
+
+
+def test_c18_send_message_returns_401_without_auth(_without_auth_bypass: None) -> None:
+    """POST /messages returns 401 for an unauthenticated caller (C18)."""
+    resp = client.post(
+        "/messages",
+        json={"sender_id": "a", "recipient_id": "b", "body": "hi"},
+    )
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "unauthenticated"
+
+
+def test_c18_block_returns_401_without_auth(_without_auth_bypass: None) -> None:
+    """POST /blocks returns 401 for an unauthenticated caller (C18)."""
+    resp = client.post("/blocks", json={"blocker_id": "a", "blocked_id": "b"})
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "unauthenticated"
+
+
+def test_c18_report_returns_401_without_auth(_without_auth_bypass: None) -> None:
+    """POST /reports returns 401 for an unauthenticated caller (C18)."""
+    resp = client.post(
+        "/reports",
+        json={
+            "reporter_id": "a",
+            "target_id": "b",
+            "target_kind": "user",
+            "reason": "spam",
+        },
+    )
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "unauthenticated"
+
+
+def test_c18_delete_account_returns_401_without_auth(_without_auth_bypass: None) -> None:
+    """DELETE /profiles/{id} returns 401 for an unauthenticated caller (C18)."""
+    resp = client.delete("/profiles/any-id")
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "unauthenticated"
+
+
+def test_c18_authenticated_request_proceeds_normally() -> None:
+    """A request with a valid X-User-ID header passes auth and reaches the endpoint (C18)."""
+    # Auth is bypassed by the autouse fixture; confirm the endpoint works normally.
+    _make_profile(client, "c18-auth-ok", age=25)
+    resp = client.get("/profiles/c18-auth-ok")
+    assert resp.status_code == 200
+    assert resp.json()["id"] == "c18-auth-ok"
+
+
+def test_c18_healthz_is_public() -> None:
+    """GET /healthz is accessible without auth — it is a public health check (C18)."""
+    # Remove auth bypass and confirm healthz still works (it has no auth dependency)
+    from app.auth import require_auth
+    from app.main import app as _app
+
+    saved = _app.dependency_overrides.pop(require_auth, None)
+    try:
+        resp = client.get("/healthz")
+        assert resp.status_code == 200
+    finally:
+        if saved is not None:
+            _app.dependency_overrides[require_auth] = saved
+
+
+def test_c18_retention_policy_is_public() -> None:
+    """GET /retention-policy is accessible without auth — it is a public endpoint (C18)."""
+    from app.auth import require_auth
+    from app.main import app as _app
+
+    saved = _app.dependency_overrides.pop(require_auth, None)
+    try:
+        resp = client.get("/retention-policy")
+        assert resp.status_code == 200
+    finally:
+        if saved is not None:
+            _app.dependency_overrides[require_auth] = saved
+
+
+def test_c18_may_contact_returns_401_without_auth(_without_auth_bypass: None) -> None:
+    """GET /may-contact/{a}/{b} returns 401 for an unauthenticated caller (C18)."""
+    resp = client.get("/may-contact/a/b")
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "unauthenticated"

@@ -15,9 +15,10 @@ live Keycloak instance.
 
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 
+from .auth import require_auth
 from .domain import (
     VALID_SEARCH_RADII,
     AgeAssuranceStatus,
@@ -211,7 +212,7 @@ def healthz() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-@app.get("/profiles/me")
+@app.get("/profiles/me", dependencies=[Depends(require_auth)])
 def profile_me() -> dict[str, str]:
     # ponytail: hardcoded placeholder until auth (step 3) supplies a real
     # user id. The ProfileStore already supports real lookups via /profiles/{id}.
@@ -222,7 +223,7 @@ def profile_me() -> dict[str, str]:
     }
 
 
-@app.post("/profiles", status_code=status.HTTP_201_CREATED, response_model=ProfileOut)
+@app.post("/profiles", status_code=status.HTTP_201_CREATED, response_model=ProfileOut, dependencies=[Depends(require_auth)])
 def create_profile(body: ProfileIn) -> ProfileOut:
     """Create or update a profile (upsert)."""
     location = (
@@ -249,7 +250,7 @@ def create_profile(body: ProfileIn) -> ProfileOut:
     return _profile_out(profile)
 
 
-@app.get("/profiles/{profile_id}", response_model=ProfileOut)
+@app.get("/profiles/{profile_id}", response_model=ProfileOut, dependencies=[Depends(require_auth)])
 def get_profile(profile_id: str) -> ProfileOut:
     profile = _profiles.find(profile_id)
     if profile is None:
@@ -257,7 +258,7 @@ def get_profile(profile_id: str) -> ProfileOut:
     return _profile_out(profile)
 
 
-@app.patch("/profiles/{profile_id}/availability", response_model=ProfileOut)
+@app.patch("/profiles/{profile_id}/availability", response_model=ProfileOut, dependencies=[Depends(require_auth)])
 def toggle_availability(profile_id: str, open_to_friends: bool) -> ProfileOut:
     """Toggle the 'open to new friends' status (AC#6).
 
@@ -288,7 +289,7 @@ def toggle_availability(profile_id: str, open_to_friends: bool) -> ProfileOut:
 # ---------------------------------------------------------------------------
 
 
-@app.get("/discovery/{searcher_id}", response_model=list[DiscoveryResultOut])
+@app.get("/discovery/{searcher_id}", response_model=list[DiscoveryResultOut], dependencies=[Depends(require_auth)])
 def discovery(
     searcher_id: str,
     radius_km: int = 25,
@@ -357,7 +358,7 @@ class AgeAssuranceIn(BaseModel):
     status: AgeAssuranceStatus
 
 
-@app.post("/profiles/{profile_id}/age-assurance", response_model=ProfileOut)
+@app.post("/profiles/{profile_id}/age-assurance", response_model=ProfileOut, dependencies=[Depends(require_auth)])
 def record_age_assurance(profile_id: str, body: AgeAssuranceIn) -> ProfileOut:
     """Record the age assurance result for a profile (AC#5).
 
@@ -383,7 +384,7 @@ def record_age_assurance(profile_id: str, body: AgeAssuranceIn) -> ProfileOut:
 # ---------------------------------------------------------------------------
 
 
-@app.post("/connections", status_code=status.HTTP_201_CREATED, response_model=ConnectionOut)
+@app.post("/connections", status_code=status.HTTP_201_CREATED, response_model=ConnectionOut, dependencies=[Depends(require_auth)])
 def send_connection_request(requester_id: str, recipient_id: str) -> ConnectionOut:
     """Send a connection request (AC#5, AC#7)."""
     conn, reason = _connections.send_request(requester_id, recipient_id)
@@ -402,7 +403,7 @@ def send_connection_request(requester_id: str, recipient_id: str) -> ConnectionO
     )
 
 
-@app.post("/connections/{connection_id}/accept", response_model=ConnectionOut)
+@app.post("/connections/{connection_id}/accept", response_model=ConnectionOut, dependencies=[Depends(require_auth)])
 def accept_connection(connection_id: str, acceptor_id: str) -> ConnectionOut:
     """Accept a pending connection request (AC#6)."""
     ok = _connections.accept_request(connection_id, acceptor_id)
@@ -426,7 +427,7 @@ def accept_connection(connection_id: str, acceptor_id: str) -> ConnectionOut:
 # ---------------------------------------------------------------------------
 
 
-@app.post("/messages", status_code=status.HTTP_201_CREATED, response_model=MessageOut)
+@app.post("/messages", status_code=status.HTTP_201_CREATED, response_model=MessageOut, dependencies=[Depends(require_auth)])
 def send_message(body: MessageIn) -> MessageOut:
     """Send a message (AC#9, AC#7).
 
@@ -450,7 +451,7 @@ def send_message(body: MessageIn) -> MessageOut:
     )
 
 
-@app.get("/messages/{user1_id}/{user2_id}", response_model=list[MessageOut])
+@app.get("/messages/{user1_id}/{user2_id}", response_model=list[MessageOut], dependencies=[Depends(require_auth)])
 def get_messages(user1_id: str, user2_id: str) -> list[MessageOut]:
     """Return all messages exchanged between two users (AC#6)."""
     return [
@@ -464,7 +465,7 @@ def get_messages(user1_id: str, user2_id: str) -> list[MessageOut]:
 # ---------------------------------------------------------------------------
 
 
-@app.post("/blocks", status_code=status.HTTP_204_NO_CONTENT)
+@app.post("/blocks", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_auth)])
 def block_user(body: BlockIn) -> None:
     """Block a user (AC#7 / P5)."""
     if not body.blocker_id.strip() or not body.blocked_id.strip():
@@ -472,13 +473,13 @@ def block_user(body: BlockIn) -> None:
     _profiles.block(body.blocker_id, body.blocked_id)
 
 
-@app.get("/blocks/{blocker_id}/{blocked_id}")
+@app.get("/blocks/{blocker_id}/{blocked_id}", dependencies=[Depends(require_auth)])
 def check_block(blocker_id: str, blocked_id: str) -> dict[str, bool]:
     """Check whether blocker_id has blocked blocked_id."""
     return {"blocked": _profiles.is_blocked(blocker_id, blocked_id)}
 
 
-@app.get("/may-contact/{a_id}/{b_id}")
+@app.get("/may-contact/{a_id}/{b_id}", dependencies=[Depends(require_auth)])
 def check_may_contact(a_id: str, b_id: str) -> dict[str, bool]:
     """Check whether a and b may contact each other (bidirectional block check).
 
@@ -509,7 +510,7 @@ def _report_out(report: Report) -> ReportOut:
     )
 
 
-@app.post("/reports", status_code=status.HTTP_201_CREATED, response_model=ReportOut)
+@app.post("/reports", status_code=status.HTTP_201_CREATED, response_model=ReportOut, dependencies=[Depends(require_auth)])
 def submit_report(body: ReportIn) -> ReportOut:
     """Submit a report (AC#8, AC#12 / P5).
 
@@ -533,7 +534,7 @@ def submit_report(body: ReportIn) -> ReportOut:
     return _report_out(report)
 
 
-@app.get("/reports/queue", response_model=list[ReportOut])
+@app.get("/reports/queue", response_model=list[ReportOut], dependencies=[Depends(require_auth)])
 def get_review_queue() -> list[ReportOut]:
     """Return all reports in review-queue order (AC#12).
 
@@ -544,7 +545,7 @@ def get_review_queue() -> list[ReportOut]:
     return [_report_out(r) for r in _reports.get_queue()]
 
 
-@app.post("/reports/{report_id}/resolve", response_model=ReportOut)
+@app.post("/reports/{report_id}/resolve", response_model=ReportOut, dependencies=[Depends(require_auth)])
 def resolve_report(report_id: str, body: ResolveReportIn) -> ReportOut:
     """Resolve a report with one of the three permitted outcomes (AC#13).
 
@@ -581,7 +582,7 @@ def resolve_report(report_id: str, body: ResolveReportIn) -> ReportOut:
     return _report_out(report)
 
 
-@app.get("/profiles/{profile_id}/contact-status", response_model=ContactStatusOut)
+@app.get("/profiles/{profile_id}/contact-status", response_model=ContactStatusOut, dependencies=[Depends(require_auth)])
 def get_contact_status(profile_id: str) -> ContactStatusOut:
     """Return the contact removal status for a profile (AC#14).
 
@@ -601,7 +602,7 @@ def get_contact_status(profile_id: str) -> ContactStatusOut:
 # ---------------------------------------------------------------------------
 
 
-@app.delete("/profiles/{profile_id}", response_model=AccountDeletionOut)
+@app.delete("/profiles/{profile_id}", response_model=AccountDeletionOut, dependencies=[Depends(require_auth)])
 def delete_account(profile_id: str) -> AccountDeletionOut:
     """Delete an account and report exactly what was removed and what was retained (AC#15).
 
