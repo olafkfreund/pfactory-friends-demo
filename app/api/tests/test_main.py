@@ -1041,3 +1041,211 @@ def test_c18_may_contact_returns_401_without_auth(_without_auth_bypass: None) ->
     resp = client.get("/may-contact/a/b")
     assert resp.status_code == 401
     assert resp.json()["detail"] == "unauthenticated"
+
+
+# ---------------------------------------------------------------------------
+# C20 — Every refusal carries a machine-readable reason code (no plain English
+#        sentences in the 'detail' field — only snake_case reason codes)
+# ---------------------------------------------------------------------------
+
+
+def test_c20_profile_not_found_is_machine_readable() -> None:
+    """GET /profiles/{id} with an unknown id returns machine-readable 'profile_not_found' (C20)."""
+    resp = client.get("/profiles/does-not-exist")
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "profile_not_found"
+
+
+def test_c20_age_below_minimum_is_machine_readable() -> None:
+    """POST /profiles with age < 16 returns machine-readable 'age_below_minimum' (C20, C3)."""
+    resp = client.post(
+        "/profiles",
+        json={"id": "c20-underage", "display_name": "Young", "age": 14},
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "age_below_minimum"
+
+
+def test_c20_invalid_radius_is_machine_readable() -> None:
+    """GET /discovery/{id} with an invalid radius returns 'invalid_radius' (C20)."""
+    _make_profile(client, "c20-disc-user", age=25)
+    _pass_age_assurance(client, "c20-disc-user")
+    resp = client.get("/discovery/c20-disc-user?radius_km=99")
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "invalid_radius"
+
+
+def test_c20_age_assurance_unrecorded_is_machine_readable() -> None:
+    """GET /discovery/{id} for a user without age assurance returns 'age_assurance_unrecorded' (C20, C5)."""
+    _make_profile(client, "c20-aa-unrecorded", age=25)
+    resp = client.get("/discovery/c20-aa-unrecorded?radius_km=25")
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "age_assurance_unrecorded"
+
+
+def test_c20_age_assurance_failed_is_machine_readable() -> None:
+    """GET /discovery/{id} for a user with failed age assurance returns 'age_assurance_failed' (C20, C5)."""
+    _make_profile(client, "c20-aa-failed", age=25)
+    client.post(
+        "/profiles/c20-aa-failed/age-assurance",
+        json={"status": "failed"},
+    )
+    resp = client.get("/discovery/c20-aa-failed?radius_km=25")
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "age_assurance_failed"
+
+
+def test_c20_age_assurance_status_immutable_is_machine_readable() -> None:
+    """POST /profiles/{id}/age-assurance with 'unrecorded' returns 'age_assurance_status_immutable' (C20)."""
+    _make_profile(client, "c20-aa-immutable", age=25)
+    resp = client.post(
+        "/profiles/c20-aa-immutable/age-assurance",
+        json={"status": "unrecorded"},
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "age_assurance_status_immutable"
+
+
+def test_c20_accept_connection_not_found_is_machine_readable() -> None:
+    """POST /connections/{id}/accept with an unknown id returns 'connection_not_found' (C20)."""
+    resp = client.post("/connections/nonexistent-conn/accept?acceptor_id=someone")
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "connection_not_found"
+
+
+def test_c20_accept_connection_wrong_acceptor_is_machine_readable() -> None:
+    """POST /connections/{id}/accept with wrong acceptor returns 'wrong_acceptor' (C20)."""
+    _make_profile(client, "c20-wr-req", age=25)
+    _make_profile(client, "c20-wr-rec", age=26)
+    _make_profile(client, "c20-wr-other", age=27)
+    send_resp = client.post("/connections?requester_id=c20-wr-req&recipient_id=c20-wr-rec")
+    conn_id = send_resp.json()["id"]
+    resp = client.post(f"/connections/{conn_id}/accept?acceptor_id=c20-wr-other")
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "wrong_acceptor"
+
+
+def test_c20_accept_already_accepted_returns_machine_readable_reason() -> None:
+    """POST /connections/{id}/accept on an already-accepted connection returns 'connection_not_pending' (C20)."""
+    _make_profile(client, "c20-re-req", age=25)
+    _make_profile(client, "c20-re-rec", age=26)
+    send_resp = client.post("/connections?requester_id=c20-re-req&recipient_id=c20-re-rec")
+    conn_id = send_resp.json()["id"]
+    client.post(f"/connections/{conn_id}/accept?acceptor_id=c20-re-rec")
+    # Second accept attempt
+    resp = client.post(f"/connections/{conn_id}/accept?acceptor_id=c20-re-rec")
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "connection_not_pending"
+
+
+def test_c20_blank_blocker_id_is_machine_readable() -> None:
+    """POST /blocks with blank blocker_id returns 'blank_blocker_id' (C20)."""
+    resp = client.post("/blocks", json={"blocker_id": "  ", "blocked_id": "target"})
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "blank_blocker_id"
+
+
+def test_c20_blank_blocked_id_is_machine_readable() -> None:
+    """POST /blocks with blank blocked_id returns 'blank_blocked_id' (C20)."""
+    resp = client.post("/blocks", json={"blocker_id": "source", "blocked_id": "  "})
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "blank_blocked_id"
+
+
+def test_c20_blank_reporter_id_is_machine_readable() -> None:
+    """POST /reports with blank reporter_id returns 'blank_reporter_id' (C20)."""
+    resp = client.post(
+        "/reports",
+        json={
+            "reporter_id": "  ",
+            "target_id": "target",
+            "target_kind": "user",
+            "reason": "spam",
+        },
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "blank_reporter_id"
+
+
+def test_c20_blank_target_id_is_machine_readable() -> None:
+    """POST /reports with blank target_id returns 'blank_target_id' (C20)."""
+    resp = client.post(
+        "/reports",
+        json={
+            "reporter_id": "reporter",
+            "target_id": "  ",
+            "target_kind": "user",
+            "reason": "spam",
+        },
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "blank_target_id"
+
+
+def test_c20_additional_text_too_long_is_machine_readable() -> None:
+    """POST /reports with additional_text exceeding max length returns 'additional_text_too_long' (C20)."""
+    from app.store import MAX_FREE_TEXT_LENGTH
+
+    resp = client.post(
+        "/reports",
+        json={
+            "reporter_id": "reporter",
+            "target_id": "target",
+            "target_kind": "user",
+            "reason": "spam",
+            "additional_text": "x" * (MAX_FREE_TEXT_LENGTH + 1),
+        },
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "additional_text_too_long"
+
+
+def test_c20_delete_profile_not_found_is_machine_readable() -> None:
+    """DELETE /profiles/{id} for unknown profile returns 'profile_not_found' (C20)."""
+    resp = client.delete("/profiles/no-such-user")
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "profile_not_found"
+
+
+def test_c20_toggle_availability_not_found_is_machine_readable() -> None:
+    """PATCH /profiles/{id}/availability for unknown profile returns 'profile_not_found' (C20)."""
+    resp = client.patch("/profiles/ghost/availability?open_to_friends=true")
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "profile_not_found"
+
+
+def test_c20_all_refusal_details_are_snake_case_reason_codes() -> None:
+    """Smoke-test that every detail value in our test suite is a machine-readable code.
+
+    This test exercises a sample of refusal paths and asserts that the 'detail'
+    field is a snake_case identifier (contains no spaces and is not a sentence),
+    so auditors and clients can branch on the code string rather than parsing
+    English.
+    """
+    cases = [
+        # (method, url, body, expected_status, expected_detail)
+        ("GET", "/profiles/no-such", None, 404, "profile_not_found"),
+        ("DELETE", "/profiles/no-such", None, 404, "profile_not_found"),
+        ("GET", "/discovery/no-such?radius_km=25", None, 404, "profile_not_found"),
+        ("POST", "/profiles", {"id": "x", "display_name": "Y", "age": 5}, 422, "age_below_minimum"),
+        ("POST", "/blocks", {"blocker_id": "", "blocked_id": "b"}, 422, "blank_blocker_id"),
+        (
+            "POST",
+            "/reports",
+            {"reporter_id": "", "target_id": "t", "target_kind": "user", "reason": "spam"},
+            422,
+            "blank_reporter_id",
+        ),
+    ]
+    for method, url, body, expected_status, expected_detail in cases:
+        if method == "GET":
+            resp = client.get(url)
+        elif method == "DELETE":
+            resp = client.delete(url)
+        else:
+            resp = client.request(method, url, json=body)
+        assert resp.status_code == expected_status, f"{method} {url}: expected {expected_status}, got {resp.status_code}"
+        detail = resp.json().get("detail", "")
+        assert detail == expected_detail, f"{method} {url}: expected '{expected_detail}', got '{detail}'"
+        # Confirm it's a machine-readable code: no spaces, not a sentence
+        assert " " not in str(detail), f"{method} {url}: detail '{detail}' contains spaces — not a code"

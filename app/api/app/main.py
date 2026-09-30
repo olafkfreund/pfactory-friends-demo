@@ -254,7 +254,7 @@ def create_profile(body: ProfileIn) -> ProfileOut:
 def get_profile(profile_id: str) -> ProfileOut:
     profile = _profiles.find(profile_id)
     if profile is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="profile not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="profile_not_found")
     return _profile_out(profile)
 
 
@@ -268,7 +268,7 @@ def toggle_availability(profile_id: str, open_to_friends: bool) -> ProfileOut:
     """
     profile = _profiles.find(profile_id)
     if profile is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="profile not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="profile_not_found")
     updated = Profile(
         id=profile.id,
         display_name=profile.display_name,
@@ -315,11 +315,11 @@ def discovery(
     if radius_km not in VALID_SEARCH_RADII:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"radius_km must be one of {sorted(VALID_SEARCH_RADII)}",
+            detail="invalid_radius",
         )
     searcher = _profiles.find(searcher_id)
     if searcher is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="searcher not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="profile_not_found")
     # AC#5: searcher must have passed age assurance to use discovery.
     if searcher.age_assurance_status == AgeAssuranceStatus.UNRECORDED:
         raise HTTPException(
@@ -367,11 +367,11 @@ def record_age_assurance(profile_id: str, body: AgeAssuranceIn) -> ProfileOut:
     """
     profile = _profiles.find(profile_id)
     if profile is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="profile not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="profile_not_found")
     if body.status == AgeAssuranceStatus.UNRECORDED:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="cannot set age_assurance_status to 'unrecorded' via this endpoint",
+            detail="age_assurance_status_immutable",
         )
     _profiles.set_age_assurance(profile_id, body.status)
     updated = _profiles.find(profile_id)
@@ -406,12 +406,14 @@ def send_connection_request(requester_id: str, recipient_id: str) -> ConnectionO
 @app.post("/connections/{connection_id}/accept", response_model=ConnectionOut, dependencies=[Depends(require_auth)])
 def accept_connection(connection_id: str, acceptor_id: str) -> ConnectionOut:
     """Accept a pending connection request (AC#6)."""
-    ok = _connections.accept_request(connection_id, acceptor_id)
+    ok, reason = _connections.accept_request(connection_id, acceptor_id)
     if not ok:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="connection not found, wrong acceptor, or not pending",
-        )
+        code = {
+            "connection_not_found": status.HTTP_404_NOT_FOUND,
+            "wrong_acceptor": status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "connection_not_pending": status.HTTP_409_CONFLICT,
+        }.get(reason or "", status.HTTP_422_UNPROCESSABLE_ENTITY)
+        raise HTTPException(status_code=code, detail=reason)
     conn = _connections.get_connection(connection_id)
     assert conn is not None
     return ConnectionOut(
@@ -468,8 +470,14 @@ def get_messages(user1_id: str, user2_id: str) -> list[MessageOut]:
 @app.post("/blocks", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_auth)])
 def block_user(body: BlockIn) -> None:
     """Block a user (AC#7 / P5)."""
-    if not body.blocker_id.strip() or not body.blocked_id.strip():
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="blank id")
+    if not body.blocker_id.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="blank_blocker_id"
+        )
+    if not body.blocked_id.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="blank_blocked_id"
+        )
     _profiles.block(body.blocker_id, body.blocked_id)
 
 
@@ -518,7 +526,7 @@ def submit_report(body: ReportIn) -> ReportOut:
     Setting immediate_harm=True places the report ahead of all non-harm reports
     in the queue, regardless of when each was submitted (AC#12).
     """
-    report = _reports.submit(
+    report, reason = _reports.submit(
         reporter_id=body.reporter_id,
         target_id=body.target_id,
         target_kind=body.target_kind,
@@ -529,7 +537,7 @@ def submit_report(body: ReportIn) -> ReportOut:
     if report is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="invalid report (blank id or additional_text too long)",
+            detail=reason,
         )
     return _report_out(report)
 
@@ -621,7 +629,7 @@ def delete_account(profile_id: str) -> AccountDeletionOut:
     """
     profile = _profiles.find(profile_id)
     if profile is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="profile not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="profile_not_found")
 
     # Count interest tags (interests list + activities list) before deletion.
     tags_count = len(profile.interests) + len(profile.activities)

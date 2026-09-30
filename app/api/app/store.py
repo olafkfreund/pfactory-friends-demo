@@ -63,11 +63,19 @@ class ProfileStore:
         self._contact_removed: set[str] = set()
 
     def save(self, profile: Profile) -> None:
-        """Persist profile (upsert semantics)."""
+        """Persist profile (upsert semantics).
+
+        Raises ValueError with a machine-readable reason code (C20) on
+        validation failure:
+        - ``"blank_id"``            — profile id is blank or whitespace-only
+        - ``"age_below_minimum"``   — age is below MIN_AGE (16)
+        - ``"blank_display_name"``  — display_name is blank or whitespace-only
+        - ``"display_name_too_long"`` — display_name exceeds MAX_DISPLAY_NAME_LENGTH
+        """
         if not profile.id.strip():
-            raise ValueError("profile id must not be blank")
+            raise ValueError("blank_id")
         if profile.age < MIN_AGE:
-            raise ValueError(f"age must be at least {MIN_AGE}")
+            raise ValueError("age_below_minimum")
         self._profiles[profile.id] = profile
 
     def find(self, profile_id: str) -> Profile | None:
@@ -323,22 +331,32 @@ class ConnectionStore:
         self._request_timestamps[requester_id].append(now_ms)
         return conn, None
 
-    def accept_request(self, connection_id: str, acceptor_id: str) -> bool:
-        """Accept a pending connection request on behalf of acceptor_id (AC#6)."""
+    def accept_request(
+        self, connection_id: str, acceptor_id: str
+    ) -> tuple[bool, str | None]:
+        """Accept a pending connection request on behalf of acceptor_id (AC#6).
+
+        Returns ``(True, None)`` on success.
+        Returns ``(False, reason)`` on refusal with a machine-readable reason
+        code (C20):
+        - ``"connection_not_found"``  — no connection with connection_id exists
+        - ``"wrong_acceptor"``        — acceptor_id is not the recipient
+        - ``"connection_not_pending"`` — connection is not in PENDING state
+        """
         conn = self._connections.get(connection_id)
         if conn is None:
-            return False
+            return False, "connection_not_found"
         if conn.recipient_id != acceptor_id:
-            return False
+            return False, "wrong_acceptor"
         if conn.status != ConnectionStatus.PENDING:
-            return False
+            return False, "connection_not_pending"
         self._connections[connection_id] = Connection(
             id=conn.id,
             requester_id=conn.requester_id,
             recipient_id=conn.recipient_id,
             status=ConnectionStatus.ACCEPTED,
         )
-        return True
+        return True, None
 
     def are_connected(self, user1: str, user2: str) -> bool:
         """Return True when user1 and user2 hold an accepted connection (AC#6)."""
@@ -467,18 +485,25 @@ class ReportStore:
         reason: ReportReason,
         additional_text: str = "",
         immediate_harm: bool = False,
-    ) -> Report | None:
-        """Submit a report; return None when validation fails.
+    ) -> tuple[Report | None, str | None]:
+        """Submit a report; return ``(report, None)`` on success or ``(None, reason)`` on failure.
 
         AC#12: every submitted report enters the queue in the ACCEPTED state.
         Reports with immediate_harm=True will be ordered ahead of all others
         in the review queue, regardless of submission time.
+
+        Failure reasons are machine-readable codes (C20):
+        - ``"blank_reporter_id"``       — reporter_id is blank or whitespace-only
+        - ``"blank_target_id"``         — target_id is blank or whitespace-only
+        - ``"additional_text_too_long"`` — additional_text exceeds MAX_FREE_TEXT_LENGTH
         """
-        if not reporter_id.strip() or not target_id.strip():
-            return None
+        if not reporter_id.strip():
+            return None, "blank_reporter_id"
+        if not target_id.strip():
+            return None, "blank_target_id"
         trimmed = additional_text.strip()
         if len(trimmed) > MAX_FREE_TEXT_LENGTH:
-            return None
+            return None, "additional_text_too_long"
         report = Report(
             id=f"report-{self._next_id}",
             reporter_id=reporter_id,
@@ -491,7 +516,7 @@ class ReportStore:
         )
         self._next_id += 1
         self._reports.append(report)
-        return report
+        return report, None
 
     def get_queue(self) -> list[Report]:
         """Return all reports ordered for moderation review (AC#12).

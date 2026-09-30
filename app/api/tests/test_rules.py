@@ -287,8 +287,9 @@ class TestConnectionRequests:
         conn, _ = cs.send_request("alice", "bob")
         assert conn is not None
         assert not cs.are_connected("alice", "bob")
-        ok = cs.accept_request(conn.id, "bob")
+        ok, reason = cs.accept_request(conn.id, "bob")
         assert ok is True
+        assert reason is None
         assert cs.are_connected("alice", "bob")
 
 
@@ -371,37 +372,42 @@ class TestReports:
     def test_submit_user_report(self) -> None:
         """A person can report another person with a fixed reason (AC#8)."""
         rs = ReportStore()
-        report = rs.submit("alice", "bob", ReportTargetKind.USER, ReportReason.SPAM)
+        report, err = rs.submit("alice", "bob", ReportTargetKind.USER, ReportReason.SPAM)
         assert report is not None
+        assert err is None
         assert report.reason == ReportReason.SPAM
 
     def test_submit_message_report(self) -> None:
         """A person can report a message (AC#8)."""
         rs = ReportStore()
-        report = rs.submit("alice", "msg-1", ReportTargetKind.MESSAGE, ReportReason.HARASSMENT)
+        report, err = rs.submit("alice", "msg-1", ReportTargetKind.MESSAGE, ReportReason.HARASSMENT)
         assert report is not None
+        assert err is None
         assert report.target_kind == ReportTargetKind.MESSAGE
 
     def test_report_with_optional_text(self) -> None:
         """A report can include optional free text (AC#8)."""
         rs = ReportStore()
-        report = rs.submit(
+        report, err = rs.submit(
             "alice", "bob", ReportTargetKind.USER, ReportReason.OTHER, "more context"
         )
         assert report is not None
+        assert err is None
         assert report.additional_text == "more context"
 
     def test_blank_reporter_id_rejected(self) -> None:
-        """A report with a blank reporter id is rejected."""
+        """A report with a blank reporter id is rejected with machine-readable reason (C20)."""
         rs = ReportStore()
-        report = rs.submit("", "bob", ReportTargetKind.USER, ReportReason.SPAM)
+        report, err = rs.submit("", "bob", ReportTargetKind.USER, ReportReason.SPAM)
         assert report is None
+        assert err == "blank_reporter_id"
 
     def test_free_text_trimmed(self) -> None:
         """Free text is trimmed before storage."""
         rs = ReportStore()
-        report = rs.submit("alice", "bob", ReportTargetKind.USER, ReportReason.OTHER, "  trimmed  ")
+        report, err = rs.submit("alice", "bob", ReportTargetKind.USER, ReportReason.OTHER, "  trimmed  ")
         assert report is not None
+        assert err is None
         assert report.additional_text == "trimmed"
 
 

@@ -8,6 +8,40 @@
 import type { Connection, DiscoveryResult, MeProfile, Message, ProfileCreate, ReportReason } from './types.ts'
 
 /**
+ * Structured API error — carries a machine-readable reason code (C20) so the
+ * UI can branch on the specific reason for a refusal and present an accurate
+ * message, and so an auditor can tell exactly why a request was rejected.
+ *
+ * ``reason`` is the ``detail`` field from the API error response body, which
+ * every endpoint returns as a snake_case code string (e.g. ``"blocked"``,
+ * ``"age_assurance_unrecorded"``, ``"rate_limit_exceeded"``).  When no
+ * ``detail`` field is present the reason falls back to ``"http_<status>"``.
+ */
+export class ApiError extends Error {
+  /** Machine-readable reason code from the API (C20). */
+  readonly reason: string
+  /** HTTP status code of the failed response. */
+  readonly status: number
+
+  constructor(reason: string, status: number) {
+    super(reason)
+    this.name = 'ApiError'
+    this.reason = reason
+    this.status = status
+  }
+}
+
+/**
+ * Parse a failed response into an ApiError, reading the machine-readable
+ * ``detail`` field from the JSON body (C20).
+ */
+async function toApiError(res: Response): Promise<ApiError> {
+  const body = (await res.json().catch(() => ({}))) as { detail?: string }
+  const reason = body.detail ?? `http_${res.status}`
+  return new ApiError(reason, res.status)
+}
+
+/**
  * Create or update a profile (upsert via POST /profiles).
  * AC#19: the web client can perform the create-profile step of the whole flow.
  */
@@ -17,17 +51,14 @@ export async function createProfile(data: ProfileCreate): Promise<MeProfile> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   })
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { detail?: string }
-    throw new Error(body.detail ?? `request failed: ${res.status}`)
-  }
+  if (!res.ok) throw await toApiError(res)
   return res.json() as Promise<MeProfile>
 }
 
 /** Load the currently authenticated user's basic profile (GET /profiles/me). */
 export async function getMe(): Promise<MeProfile> {
   const res = await fetch('/profiles/me')
-  if (!res.ok) throw new Error(`request failed: ${res.status}`)
+  if (!res.ok) throw await toApiError(res)
   return res.json() as Promise<MeProfile>
 }
 
@@ -39,7 +70,7 @@ export async function toggleAvailability(profileId: string, open: boolean): Prom
   const res = await fetch(`/profiles/${profileId}/availability?open_to_friends=${open}`, {
     method: 'PATCH',
   })
-  if (!res.ok) throw new Error(`request failed: ${res.status}`)
+  if (!res.ok) throw await toApiError(res)
 }
 
 /**
@@ -48,7 +79,7 @@ export async function toggleAvailability(profileId: string, open: boolean): Prom
  */
 export async function getDiscovery(searcherId: string): Promise<DiscoveryResult[]> {
   const res = await fetch(`/discovery/${searcherId}?radius_km=25`)
-  if (!res.ok) throw new Error(`request failed: ${res.status}`)
+  if (!res.ok) throw await toApiError(res)
   return res.json() as Promise<DiscoveryResult[]>
 }
 
@@ -64,7 +95,7 @@ export async function sendConnectionRequest(
     `/connections?requester_id=${requesterId}&recipient_id=${recipientId}`,
     { method: 'POST' },
   )
-  if (!res.ok) throw new Error(`request failed: ${res.status}`)
+  if (!res.ok) throw await toApiError(res)
   return res.json() as Promise<Connection>
 }
 
@@ -79,7 +110,7 @@ export async function acceptConnection(
   const res = await fetch(`/connections/${connectionId}/accept?acceptor_id=${acceptorId}`, {
     method: 'POST',
   })
-  if (!res.ok) throw new Error(`request failed: ${res.status}`)
+  if (!res.ok) throw await toApiError(res)
   return res.json() as Promise<Connection>
 }
 
@@ -89,7 +120,7 @@ export async function acceptConnection(
  */
 export async function getMessages(user1Id: string, user2Id: string): Promise<Message[]> {
   const res = await fetch(`/messages/${user1Id}/${user2Id}`)
-  if (!res.ok) throw new Error(`request failed: ${res.status}`)
+  if (!res.ok) throw await toApiError(res)
   return res.json() as Promise<Message[]>
 }
 
@@ -107,7 +138,7 @@ export async function sendMessage(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sender_id: senderId, recipient_id: recipientId, body }),
   })
-  if (!res.ok) throw new Error(`request failed: ${res.status}`)
+  if (!res.ok) throw await toApiError(res)
   return res.json() as Promise<Message>
 }
 
@@ -121,7 +152,7 @@ export async function blockUser(blockerId: string, blockedId: string): Promise<v
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ blocker_id: blockerId, blocked_id: blockedId }),
   })
-  if (!res.ok) throw new Error(`request failed: ${res.status}`)
+  if (!res.ok) throw await toApiError(res)
 }
 
 /**
@@ -146,5 +177,5 @@ export async function submitReport(
       additional_text: additionalText,
     }),
   })
-  if (!res.ok) throw new Error(`request failed: ${res.status}`)
+  if (!res.ok) throw await toApiError(res)
 }
