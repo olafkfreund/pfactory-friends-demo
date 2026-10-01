@@ -21,6 +21,28 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
+          env:
+            # Plan step 2: credentials come from a cluster secret, never from
+            # the repository. Created out-of-band as `myfriends-db`, holding a
+            # single DATABASE_URL key for the `myfriends` role on the cluster's
+            # postgres-0. Rotating it is `kubectl create secret ... --from-file`
+            # plus `ALTER ROLE` -- nothing here changes.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: myfriends-db
+                  key: DATABASE_URL
+            # OIDC_JWKS_URI MUST be set. The API treats its absence as
+            # permission to skip signature verification entirely, so an
+            # unconfigured deployment accepts any token bearing any `sub` --
+            # see demo#127. Setting it here closes that at the deployment
+            # level; the code's fail-open default is a separate fix.
+            - name: OIDC_JWKS_URI
+              value: "https://keycloak.freundcloud.org.uk/realms/factory/protocol/openid-connect/certs"
+            - name: OIDC_ISSUER
+              value: "https://keycloak.freundcloud.org.uk/realms/factory"
+            - name: OIDC_AUDIENCE
+              value: "myfriends-api"
           readinessProbe:
             httpGet:
               path: /healthz

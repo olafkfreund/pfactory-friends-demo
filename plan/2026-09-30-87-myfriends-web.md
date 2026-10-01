@@ -72,6 +72,46 @@ Ordered so something is showable early rather than everything landing at once.
    `ratchet_lint.py` where it applies.
 9. **PR** carrying the deploy evidence and the Playwright run; close #87.
 
+## Deviations and notes recorded during implementation
+
+- **Step 2, infrastructure half, done out-of-band.** The `myfriends` Postgres
+  role and database were created on the cluster's existing `postgres-0`
+  (alongside aifactory/pfactory/tfactory/cfactory), and the credential stored in
+  a `myfriends-db` secret holding one `DATABASE_URL` key. The plan said
+  "credentials from a cluster secret, nothing in the repository", which this
+  satisfies; the secret is created by hand rather than by a manifest precisely
+  so no credential is ever in the repo.
+  Verified the way production reads it rather than by inspecting the secret: a
+  throwaway pod with `envFrom: secretRef` ran
+  `SELECT current_database(), current_user` and returned `myfriends|myfriends`.
+
+- **The password was rotated once, immediately, and why.** The first
+  verification passed `PGPASSWORD` on a `kubectl exec` command line, which puts
+  a credential in argv — locally visible and in shell history. It was rotated
+  via stdin-only SQL, the secret re-applied, and the old material shredded. The
+  pod-with-`envFrom` check above replaced the argv one.
+
+- **Migrations: in-code, not a separate tool.** The plan said "migrations";
+  `app/api/app/store.py` carries idempotent `CREATE TABLE IF NOT EXISTS` DDL in
+  `bootstrap_schema` instead. Recorded rather than silently re-scoped — a real
+  migration tool is still the right answer once the schema has to change under
+  live data, and this is not that yet.
+
+- **`OIDC_JWKS_URI` is now set in the manifest, for a security reason the plan
+  did not anticipate.** The API treats that variable's *absence* as permission
+  to skip JWT signature verification entirely (demo#127), so an unconfigured
+  deployment accepts any token bearing any `sub` — which would defeat all
+  seventeen ownership checks from underneath. Setting it closes that at the
+  deployment level. The code's fail-open default remains a separate fix.
+  Verified: the exact URL in the manifest returns HTTP 200 from inside the
+  cluster, as does the in-cluster service address.
+
+- **Still blocked for a running service:** `psycopg` and `python-jose` are
+  declared in neither `pyproject.toml` nor `uv.lock`, and both are imported
+  lazily, so the image starts healthy and fails on the first request that
+  touches the store or validates a token (demo#127). This manifest is correct
+  and inert until that lands.
+
 ## Sequencing note
 
 Step 7 depends on **TFactory#1341**. Until it lands, a verification run rejects
