@@ -14,10 +14,10 @@ from __future__ import annotations
 import os
 import uuid
 from contextlib import contextmanager
-from typing import Generator
+from typing import TYPE_CHECKING, Generator
 
-import psycopg
-from psycopg.rows import dict_row
+if TYPE_CHECKING:
+    import psycopg as _psycopg
 
 
 # ---------------------------------------------------------------------------
@@ -35,8 +35,17 @@ def _database_url() -> str:
 
 
 @contextmanager
-def _conn() -> Generator[psycopg.Connection, None, None]:
-    """Open a psycopg3 connection and commit/rollback on exit."""
+def _conn() -> "Generator[_psycopg.Connection, None, None]":
+    """Open a psycopg3 connection and commit/rollback on exit.
+
+    psycopg is imported lazily so the module can be loaded and tested
+    without psycopg installed.  At runtime the database connector must be
+    present; the ImportError surfaces on first use rather than at startup so
+    that the health probe works even while the database is initialising.
+    """
+    import psycopg  # noqa: PLC0415
+    from psycopg.rows import dict_row  # noqa: PLC0415
+
     with psycopg.connect(_database_url(), row_factory=dict_row) as connection:
         yield connection
 
@@ -45,66 +54,79 @@ def _conn() -> Generator[psycopg.Connection, None, None]:
 # Schema bootstrap
 # ---------------------------------------------------------------------------
 
-_DDL = """
-CREATE TABLE IF NOT EXISTS profiles (
-    id             TEXT        PRIMARY KEY,
-    display_name   TEXT        NOT NULL,
-    bio            TEXT        NOT NULL DEFAULT '',
-    age            INTEGER     NOT NULL,
-    interests      TEXT[]      NOT NULL DEFAULT '{}',
-    is_open        BOOLEAN     NOT NULL DEFAULT FALSE,
-    age_assurance_passed BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    deleted_at     TIMESTAMPTZ
-);
-
-CREATE TABLE IF NOT EXISTS connections (
-    id           TEXT        PRIMARY KEY,
-    requester_id TEXT        NOT NULL REFERENCES profiles(id),
-    target_id    TEXT        NOT NULL REFERENCES profiles(id),
-    status       TEXT        NOT NULL DEFAULT 'pending',
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (requester_id, target_id)
-);
-
-CREATE TABLE IF NOT EXISTS messages (
-    id            TEXT        PRIMARY KEY,
-    connection_id TEXT        NOT NULL REFERENCES connections(id),
-    sender_id     TEXT        NOT NULL REFERENCES profiles(id),
-    body          TEXT        NOT NULL,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS blocks (
-    id         TEXT        PRIMARY KEY,
-    blocker_id TEXT        NOT NULL REFERENCES profiles(id),
-    blocked_id TEXT        NOT NULL REFERENCES profiles(id),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (blocker_id, blocked_id)
-);
-
-CREATE TABLE IF NOT EXISTS reports (
-    id          TEXT        PRIMARY KEY,
-    reporter_id TEXT        NOT NULL REFERENCES profiles(id),
-    reported_id TEXT        NOT NULL,
-    reason      TEXT        NOT NULL,
-    detail      TEXT        NOT NULL DEFAULT '',
-    status      TEXT        NOT NULL DEFAULT 'open',
-    resolved_by TEXT,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    resolved_at TIMESTAMPTZ
-);
-"""
+# DDL is split into individual statements so each runs through psycopg's
+# extended-query protocol and is independently transactional.  A single
+# multi-statement string works only with the simple-query protocol (no
+# parameters), which is an easy foot-gun to leave lying around.
+_DDL_STATEMENTS: tuple[str, ...] = (
+    """
+    CREATE TABLE IF NOT EXISTS profiles (
+        id                   TEXT        PRIMARY KEY,
+        display_name         TEXT        NOT NULL,
+        bio                  TEXT        NOT NULL DEFAULT '',
+        age                  INTEGER     NOT NULL,
+        interests            TEXT[]      NOT NULL DEFAULT '{}',
+        is_open              BOOLEAN     NOT NULL DEFAULT FALSE,
+        age_assurance_passed BOOLEAN     NOT NULL DEFAULT FALSE,
+        created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+        deleted_at           TIMESTAMPTZ
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS connections (
+        id           TEXT        PRIMARY KEY,
+        requester_id TEXT        NOT NULL REFERENCES profiles(id),
+        target_id    TEXT        NOT NULL REFERENCES profiles(id),
+        status       TEXT        NOT NULL DEFAULT 'pending',
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (requester_id, target_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS messages (
+        id            TEXT        PRIMARY KEY,
+        connection_id TEXT        NOT NULL REFERENCES connections(id),
+        sender_id     TEXT        NOT NULL REFERENCES profiles(id),
+        body          TEXT        NOT NULL,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS blocks (
+        id         TEXT        PRIMARY KEY,
+        blocker_id TEXT        NOT NULL REFERENCES profiles(id),
+        blocked_id TEXT        NOT NULL REFERENCES profiles(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (blocker_id, blocked_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS reports (
+        id          TEXT        PRIMARY KEY,
+        reporter_id TEXT        NOT NULL REFERENCES profiles(id),
+        reported_id TEXT        NOT NULL,
+        reason      TEXT        NOT NULL,
+        detail      TEXT        NOT NULL DEFAULT '',
+        status      TEXT        NOT NULL DEFAULT 'open',
+        resolved_by TEXT,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        resolved_at TIMESTAMPTZ
+    )
+    """,
+)
 
 
 def bootstrap_schema() -> None:
     """Create all tables if they do not already exist.
 
     Called once at application startup via the FastAPI lifespan hook.
+    Each DDL statement is executed separately so foreign-key ordering is
+    explicit and each statement uses the extended-query protocol.
     """
     with _conn() as conn:
-        conn.execute(_DDL)
+        for stmt in _DDL_STATEMENTS:
+            conn.execute(stmt)
 
 
 # ---------------------------------------------------------------------------
