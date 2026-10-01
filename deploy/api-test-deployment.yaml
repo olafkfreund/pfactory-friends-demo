@@ -1,0 +1,71 @@
+# A verification-only instance of the API.
+#
+# TFactory's api lane needs a target where a test can act as two different
+# people, so that "caller A cannot act as B" can be exercised at all. Minting
+# arbitrary subjects requires skipping signature verification, which this
+# instance opts into explicitly via ALLOW_UNVERIFIED_TOKENS=1 -- the flag that
+# exists for exactly this, and which the production path refuses to assume.
+#
+# Kept separate from `myfriends-api` on purpose:
+#   - ClusterIP only, never published through the tunnel;
+#   - its own database (`myfriends_test`), so a verification run cannot write
+#     to or truncate real data;
+#   - a distinct name, so nothing can mistake it for the real service.
+#
+# Authentication itself is NOT verified here -- it cannot be, with verification
+# off. That is covered by app/api/tests/test_token_verification_required.py,
+# which calls _decode_token directly, and by probing the real deployment.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myfriends-api-test
+  namespace: factory
+  labels:
+    app: myfriends-api-test
+    tfactory.io/purpose: verification-target
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myfriends-api-test
+  template:
+    metadata:
+      labels:
+        app: myfriends-api-test
+        tfactory.io/purpose: verification-target
+    spec:
+      containers:
+        - name: api
+          image: myfriends-api:step4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: myfriends-db-test
+                  key: DATABASE_URL
+            # Deliberate, and the reason this instance is separate.
+            - name: ALLOW_UNVERIFIED_TOKENS
+              value: "1"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: myfriends-api-test
+  namespace: factory
+spec:
+  selector:
+    app: myfriends-api-test
+  ports:
+    - port: 8000
+      targetPort: 8000

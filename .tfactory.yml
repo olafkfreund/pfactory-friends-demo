@@ -1,0 +1,31 @@
+# TFactory target configuration.
+#
+# Why this file exists: without it, TFactory's api lane has no target. The
+# generated tests read TFACTORY_TARGET_URL from the environment, the lane
+# supplies it from the target declared here, and with no target the tests
+# raised KeyError on their first line -- 11 of them in run
+# 026-myfriends-remediation-verify, every one reported as "subject behaviour is
+# wrong" when the subject had never been contacted (TFactory#1344, #1343).
+#
+# This points at myfriends-api-test, NOT the real service. See
+# deploy/api-test-deployment.yaml for why: the ownership criteria require a
+# caller who can be two different people, which needs tokens with arbitrary
+# subjects, which needs signature verification off. That instance opts into it
+# explicitly and has its own database, so a verification run cannot touch real
+# data. The real service rejects the same minted token with 401 -- measured.
+version: 1
+
+default_target: api
+
+targets:
+  - name: api
+    type: http
+    # In-cluster service address. TFactory runs in this namespace, so no
+    # port-forward is needed -- verified: the tfactory pod gets HTTP 200 from
+    # /healthz at this address.
+    base_url: http://myfriends-api-test.factory.svc.cluster.local:8000
+
+    health_check:
+      path: /healthz
+      expect_status: 200
+      timeout_seconds: 30
