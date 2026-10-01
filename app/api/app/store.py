@@ -14,10 +14,10 @@ from __future__ import annotations
 import os
 import uuid
 from contextlib import contextmanager
-from typing import Generator
+from typing import TYPE_CHECKING, Generator
 
-import psycopg
-from psycopg.rows import dict_row
+if TYPE_CHECKING:
+    import psycopg as _psycopg
 
 
 # ---------------------------------------------------------------------------
@@ -35,8 +35,17 @@ def _database_url() -> str:
 
 
 @contextmanager
-def _conn() -> Generator[psycopg.Connection, None, None]:
-    """Open a psycopg3 connection and commit/rollback on exit."""
+def _conn() -> "Generator[_psycopg.Connection, None, None]":
+    """Open a psycopg3 connection and commit/rollback on exit.
+
+    psycopg is imported lazily so the module can be loaded and tested
+    without psycopg installed.  At runtime the database connector must be
+    present; the ImportError surfaces on first use rather than at startup so
+    that the health probe works even while the database is initialising.
+    """
+    import psycopg  # noqa: PLC0415
+    from psycopg.rows import dict_row  # noqa: PLC0415
+
     with psycopg.connect(_database_url(), row_factory=dict_row) as connection:
         yield connection
 
