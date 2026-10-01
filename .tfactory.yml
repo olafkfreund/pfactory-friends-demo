@@ -7,6 +7,15 @@
 # 026-myfriends-remediation-verify, every one reported as "subject behaviour is
 # wrong" when the subject had never been contacted (TFactory#1344, #1343).
 #
+# NECESSARY BUT NOT SUFFICIENT, as of 2026-10-01. TFactory's api lane reads a
+# SNAPSHOT of this file at <spec_dir>/context/tfactory_yml.json, not the file
+# in the checkout. That snapshot is written only by snapshot_aifactory_spec,
+# whose sole caller is the task_control tool path -- so on the HTTP ingest and
+# AIFactory-handoff paths it is never written, _browser_target_url returns None,
+# and the lane still has no target. Filed as TFactory#1347 with the measured
+# chain. This file is correct and will take effect once that lands; it does not
+# on its own.
+#
 # This points at myfriends-api-test, NOT the real service. See
 # deploy/api-test-deployment.yaml for why: the ownership criteria require a
 # caller who can be two different people, which needs tokens with arbitrary
