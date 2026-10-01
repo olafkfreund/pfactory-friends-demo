@@ -11,15 +11,24 @@
 from __future__ import annotations
 
 import os
+import pathlib
 import sys
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
-# Path bootstrap: this test lives in tests/unit/; app code is in .worktree/app/api/
-sys.path.insert(
-    0,
-    os.path.join(os.path.dirname(__file__), "..", "..", ".worktree", "app", "api"),
-)
+# Path bootstrap. As generated this hardcoded ".worktree/app/api", which is
+# TFactory's verify-sandbox layout -- so in this repository the import below
+# raised ModuleNotFoundError on every run. Walk up and accept either layout.
+def _app_api_dir() -> str:
+    here = pathlib.Path(__file__).resolve()
+    for parent in here.parents:
+        for candidate in (parent / ".worktree" / "app" / "api", parent / "app" / "api"):
+            if (candidate / "app" / "store.py").is_file():
+                return str(candidate)
+    raise ModuleNotFoundError(f"app/api not found walking up from {here}")
+
+
+sys.path.insert(0, _app_api_dir())
 
 from app import store  # noqa: E402
 

@@ -21,6 +21,7 @@ whether the resource exists to the wrong caller.
 
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Annotated
@@ -29,6 +30,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
 
 from app import store
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -48,11 +51,24 @@ async def lifespan(application: FastAPI):
 def _decode_token(token: str) -> dict:
     """Decode and verify a JWT, returning its claims.
 
-    Uses the JWKS endpoint at ``OIDC_JWKS_URI``.  If that variable is not
-    set the token is decoded without signature verification — this mode is
-    for local development only and must never be used in a deployed
-    environment.  The check for ``OIDC_JWKS_URI`` absence is intentionally
-    loud in the log so that it cannot be silently left in place.
+    Verification requires ``OIDC_JWKS_URI``.  Its **absence is an error**, not
+    a mode: if it is unset the request is refused.  Skipping signature
+    verification has to be asked for explicitly, by setting
+    ``ALLOW_UNVERIFIED_TOKENS=1``, and that is only for local development.
+
+    This is deliberately the opposite of the first implementation, which
+    treated a missing ``OIDC_JWKS_URI`` as permission to decode with
+    ``verify_signature: False`` (demo#127).  An unconfigured deployment then
+    accepted any token bearing any ``sub``, which defeats every ownership
+    check in this module from underneath -- the endpoints correctly compare
+    the caller to the resource owner, but the caller became attacker-chosen.
+    The only deployment manifest in the repository had no ``env`` block at
+    all, so the fail-open path was the shipped configuration rather than a
+    hypothetical one.
+
+    ``_database_url`` in ``store.py`` already treats its missing variable as
+    an error.  Authentication now behaves the same way: unconfigured means
+    refuse, never means allow.
     """
     from jose import JWTError
     from jose import jwt as jose_jwt
@@ -60,6 +76,21 @@ def _decode_token(token: str) -> dict:
     jwks_uri = os.environ.get("OIDC_JWKS_URI")
     audience = os.environ.get("OIDC_AUDIENCE", "myfriends-api")
     issuer = os.environ.get("OIDC_ISSUER")
+    allow_unverified = os.environ.get("ALLOW_UNVERIFIED_TOKENS") == "1"
+
+    if not jwks_uri and not allow_unverified:
+        logger.error(
+            "OIDC_JWKS_URI is not set and ALLOW_UNVERIFIED_TOKENS is not '1'; "
+            "refusing the request. Signature verification cannot be skipped "
+            "implicitly (demo#127)."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Token verification is not configured: OIDC_JWKS_URI is unset. "
+                "This is a deployment error, not a client error."
+            ),
+        )
 
     try:
         if jwks_uri:
@@ -67,9 +98,12 @@ def _decode_token(token: str) -> dict:
             jwks = httpx.get(jwks_uri, timeout=10).json()
             options: dict = {}
         else:
-            # Development/test mode: accept tokens signed with "secret" or
-            # issued without verification.  This path is only reachable when
-            # OIDC_JWKS_URI is absent, which must never happen in production.
+            # Only reachable with ALLOW_UNVERIFIED_TOKENS=1 set deliberately.
+            logger.warning(
+                "ALLOW_UNVERIFIED_TOKENS=1: decoding without signature "
+                "verification. Local development only -- any token bearing "
+                "any 'sub' will be accepted."
+            )
             jwks = os.environ.get("_DEV_JWKS_SECRET", "")
             options = {"verify_signature": False}
 

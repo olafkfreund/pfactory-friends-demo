@@ -33,14 +33,9 @@ import pytest
 #     -> spec_dir/.worktree/app/api/app/store.py
 # ---------------------------------------------------------------------------
 
-_STORE_PATH = (
-    pathlib.Path(__file__).resolve().parent.parent.parent
-    / ".worktree"
-    / "app"
-    / "api"
-    / "app"
-    / "store.py"
-)
+from conftest import _find  # noqa: E402
+
+_STORE_PATH = _find("app/api/app/store.py")
 
 # Pattern that matches a connection-string URL containing embedded auth info,
 # e.g. "postgresql://someuser:somepassword@host/db" or "postgres://u:p@h".

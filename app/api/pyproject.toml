@@ -6,6 +6,12 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
+    # Both of these are imported lazily inside functions, so their absence does
+    # not fail at import time -- the pod starts healthy and dies on the first
+    # request that touches the store or validates a token (demo#127). They are
+    # runtime requirements and belong here.
+    "psycopg[binary]>=3.2",
+    "python-jose[cryptography]>=3.3",
 ]
 
 [project.optional-dependencies]

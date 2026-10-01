@@ -26,14 +26,9 @@ import pytest
 #     -> spec_dir/.worktree/app/api/app/store.py
 # ---------------------------------------------------------------------------
 
-_STORE_PATH = (
-    pathlib.Path(__file__).resolve().parent.parent.parent
-    / ".worktree"
-    / "app"
-    / "api"
-    / "app"
-    / "store.py"
-)
+from conftest import _find  # noqa: E402
+
+_STORE_PATH = _find("app/api/app/store.py")
 
 _ENTITY_NAMES = frozenset({
     "profiles",
