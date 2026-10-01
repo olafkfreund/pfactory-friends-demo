@@ -70,8 +70,14 @@ def _decode_token(token: str) -> dict:
     an error.  Authentication now behaves the same way: unconfigured means
     refuse, never means allow.
     """
-    from jose import JWTError
+    # JOSEError, not JWTError. JWKError is NOT a subclass of JWTError (checked:
+    # both derive from JOSEError independently), so a token whose `alg` does not
+    # match the JWKS key type raised JWKError straight past the handler and
+    # became a 500. Measured against the deployed service with a forged
+    # `alg: HS256` token: "JWKError: Incorrect key type. Expected: 'oct',
+    # Received: RSA". A rejection must read as a rejection.
     from jose import jwt as jose_jwt
+    from jose.exceptions import JOSEError
 
     jwks_uri = os.environ.get("OIDC_JWKS_URI")
     audience = os.environ.get("OIDC_AUDIENCE", "myfriends-api")
@@ -97,6 +103,14 @@ def _decode_token(token: str) -> dict:
             import httpx
             jwks = httpx.get(jwks_uri, timeout=10).json()
             options: dict = {}
+            # RS256 only when verifying against a JWKS. Accepting HS256 here
+            # as well is algorithm confusion: the JWKS publishes RSA PUBLIC
+            # keys, and an HMAC algorithm invites a caller to sign a token
+            # with that public key as the shared secret. python-jose happens
+            # to raise JWKError rather than verify in that case, so this path
+            # was not exploitable -- but the allowance is wrong on its own
+            # terms and nothing should depend on that library detail.
+            algorithms = ["RS256"]
         else:
             # Only reachable with ALLOW_UNVERIFIED_TOKENS=1 set deliberately.
             logger.warning(
@@ -106,17 +120,18 @@ def _decode_token(token: str) -> dict:
             )
             jwks = os.environ.get("_DEV_JWKS_SECRET", "")
             options = {"verify_signature": False}
+            algorithms = ["RS256", "HS256"]
 
         payload: dict = jose_jwt.decode(
             token,
             jwks,
-            algorithms=["RS256", "HS256"],
+            algorithms=algorithms,
             audience=audience,
             issuer=issuer,
             options=options,
         )
         return payload
-    except JWTError as exc:
+    except JOSEError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid token: {exc}",

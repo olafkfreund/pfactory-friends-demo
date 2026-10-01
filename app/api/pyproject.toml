@@ -12,6 +12,12 @@ dependencies = [
     # runtime requirements and belong here.
     "psycopg[binary]>=3.2",
     "python-jose[cryptography]>=3.3",
+    # Used by _decode_token to fetch the JWKS. Also lazily imported, also
+    # missing -- found only by deploying and watching the pod raise
+    # ModuleNotFoundError on a real request. See
+    # tests/test_lazy_imports_declared.py, which enumerates them so the next
+    # one is caught by a test instead of by a 500.
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]

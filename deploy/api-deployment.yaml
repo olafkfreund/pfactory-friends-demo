@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: myfriends-api:latest
+          image: myfriends-api:step4
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
