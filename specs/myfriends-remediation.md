@@ -48,8 +48,8 @@ infrastructure is provisioned** by this work.
 Postgres already runs in the cluster as the `postgres-0` StatefulSet and already
 serves the factory's own services. The application connects to it as another
 client and creates its own tables there. Nothing here creates a managed database
-instance, an RDS instance, or any other cloud resource; there is no cloud
-provider in this path at all.
+instance or any other cloud resource; there is no cloud provider in this path
+at all.
 
 ## Acceptance Criteria
 
