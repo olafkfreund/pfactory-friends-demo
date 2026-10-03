@@ -211,8 +211,8 @@ class ProfileCreate(BaseModel):
     @field_validator("age")
     @classmethod
     def age_in_range(cls, v: int) -> int:
-        if v < 13 or v > 120:
-            raise ValueError("age must be between 13 and 120.")
+        if v < 16 or v > 120:
+            raise ValueError("age must be between 16 and 120.")
         return v
 
     @field_validator("interests")
@@ -329,13 +329,21 @@ def create_profile(
             status_code=status.HTTP_409_CONFLICT,
             detail="A profile already exists for this account.",
         )
-    return store.create_profile(
-        profile_id=caller_id,
-        display_name=body.display_name,
-        bio=body.bio,
-        age=body.age,
-        interests=body.interests,
-    )
+    try:
+        return store.create_profile(
+            profile_id=caller_id,
+            display_name=body.display_name,
+            bio=body.bio,
+            age=body.age,
+            interests=body.interests,
+        )
+    except store.ProfileExistsError:
+        # The pre-check above misses soft-deleted rows and concurrent creates;
+        # the primary key is the authority.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A profile already exists for this account.",
+        ) from None
 
 
 @app.get("/profiles/me")

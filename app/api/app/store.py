@@ -178,6 +178,10 @@ def may_contact(a_id: str, b_id: str) -> bool:
 # Profiles
 # ---------------------------------------------------------------------------
 
+class ProfileExistsError(Exception):
+    """A profile row with this id already exists (live or soft-deleted)."""
+
+
 def create_profile(
     profile_id: str,
     display_name: str,
@@ -185,15 +189,20 @@ def create_profile(
     age: int,
     interests: list[str],
 ) -> dict:
-    with _conn() as conn:
-        row = conn.execute(
-            """
-            INSERT INTO profiles (id, display_name, bio, age, interests)
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING *
-            """,
-            (profile_id, display_name, bio, age, interests),
-        ).fetchone()
+    from psycopg.errors import UniqueViolation  # noqa: PLC0415
+
+    try:
+        with _conn() as conn:
+            row = conn.execute(
+                """
+                INSERT INTO profiles (id, display_name, bio, age, interests)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING *
+                """,
+                (profile_id, display_name, bio, age, interests),
+            ).fetchone()
+    except UniqueViolation as exc:
+        raise ProfileExistsError(profile_id) from exc
     return dict(row)
 
 

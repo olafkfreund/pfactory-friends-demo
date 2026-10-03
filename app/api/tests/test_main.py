@@ -398,3 +398,63 @@ def test_profile_age_below_minimum_rejected() -> None:
         assert resp.status_code == 422
     finally:
         app.dependency_overrides.pop(require_auth, None)
+
+
+def test_profile_age_15_refused_16_accepted() -> None:
+    """The brief's cohort starts at 16: 15 is refused naming age, 16 is created."""
+    app.dependency_overrides[require_auth] = _auth("user-1")
+    created = {"id": "user-1", "display_name": "Alice", "bio": "", "age": 16, "interests": []}
+    try:
+        resp = client.post("/profiles", json={"display_name": "Alice", "age": 15})
+        assert resp.status_code == 422
+        assert "age" in resp.text.lower()
+
+        with (
+            patch("app.store.get_profile", return_value=None),
+            patch("app.store.create_profile", return_value=created) as create,
+        ):
+            resp = client.post("/profiles", json={"display_name": "Alice", "age": 16})
+        assert resp.status_code == 201
+        assert create.call_args.kwargs["age"] == 16
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+
+def test_duplicate_insert_is_409_not_500() -> None:
+    """A primary-key collision at INSERT is a 409, not an unhandled UniqueViolation.
+
+    Reachable when the pre-check misses: a soft-deleted profile (``get_profile``
+    filters ``deleted_at IS NULL``) or two concurrent creates.
+    """
+    from contextlib import contextmanager
+
+    from psycopg.errors import UniqueViolation
+
+    statements: list[str] = []
+
+    class _Conn:
+        def execute(self, sql: str, params=None):  # noqa: ANN001, ANN202
+            statements.append(sql)
+            raise UniqueViolation('duplicate key value violates unique constraint "profiles_pkey"')
+
+    @contextmanager
+    def _fake_conn():  # noqa: ANN202
+        yield _Conn()
+
+    app.dependency_overrides[require_auth] = _auth("user-1")
+    try:
+        with (
+            patch("app.store.get_profile", return_value=None),
+            patch("app.store._conn", _fake_conn),
+        ):
+            resp = TestClient(app, raise_server_exceptions=False).post(
+                "/profiles", json={"display_name": "Alice", "age": 25}
+            )
+        assert resp.status_code == 409
+        assert "already exists" in resp.json()["detail"]
+        # The existing row was left alone: the only statement issued was the
+        # INSERT that collided; nothing updated or deleted it.
+        assert len(statements) == 1
+        assert statements[0].lstrip().startswith("INSERT")
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
